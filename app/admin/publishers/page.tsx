@@ -10,16 +10,10 @@ interface Publisher {
   created_at: string;
 }
 
-interface Product {
+interface ResolvedProduct {
   id: number;
   title: string;
   vendor: string;
-  image: string | null;
-}
-
-interface Permission {
-  shopify_product_id: number;
-  product_title: string;
 }
 
 export default function PublishersPage() {
@@ -35,12 +29,11 @@ export default function PublishersPage() {
 
   // Permission editing state
   const [editingPublisher, setEditingPublisher] = useState<Publisher | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [selectedProducts, setSelectedProducts] = useState<Set<number>>(new Set());
-  const [loadingProducts, setLoadingProducts] = useState(false);
-  const [loadingPerms, setLoadingPerms] = useState(false);
+  const [productIds, setProductIds] = useState<string>(""); // Comma-separated IDs
+  const [resolvedProducts, setResolvedProducts] = useState<ResolvedProduct[]>([]);
+  const [resolving, setResolving] = useState(false);
   const [savingPerms, setSavingPerms] = useState(false);
-  const [permSearch, setPermSearch] = useState("");
+  const [newProductId, setNewProductId] = useState("");
 
   const fetchPublishers = useCallback(async () => {
     try {
@@ -117,60 +110,106 @@ export default function PublishersPage() {
     }
   };
 
-  // --- Edit Permissions ---
+  // --- Open Permissions Editor ---
   const openPermissions = async (pub: Publisher) => {
     setEditingPublisher(pub);
-    setPermSearch("");
+    setNewProductId("");
+    setResolvedProducts([]);
 
-    // Load products from cache
-    if (products.length === 0) {
-      setLoadingProducts(true);
-      try {
-        const res = await fetch("/api/shopify/products");
-        const data = await res.json();
-        setProducts(data.products || []);
-      } catch (err) {
-        console.error(err);
-      } finally {
-        setLoadingProducts(false);
-      }
-    }
-
-    // Load this publisher's current permissions
-    setLoadingPerms(true);
+    // Load current permissions
     try {
       const res = await fetch(`/api/admin/permissions?publisher_id=${pub.id}`);
       const data = await res.json();
-      const perms: Permission[] = data.permissions || [];
-      setSelectedProducts(new Set(perms.map((p) => p.shopify_product_id)));
+      const perms = data.permissions || [];
+      
+      if (perms.length > 0) {
+        const ids = perms.map((p: { shopify_product_id: number }) => p.shopify_product_id);
+        setProductIds(ids.join(", "));
+        
+        // Resolve product names from Shopify (fast — single call by IDs)
+        resolveProducts(ids);
+      } else {
+        setProductIds("");
+      }
     } catch (err) {
       console.error(err);
-    } finally {
-      setLoadingPerms(false);
     }
   };
 
-  const toggleProduct = (productId: number) => {
-    setSelectedProducts((prev) => {
-      const next = new Set(prev);
-      if (next.has(productId)) {
-        next.delete(productId);
-      } else {
-        next.add(productId);
-      }
-      return next;
-    });
+  // --- Resolve product IDs to names via Shopify ---
+  const resolveProducts = async (ids: number[]) => {
+    if (ids.length === 0) {
+      setResolvedProducts([]);
+      return;
+    }
+    setResolving(true);
+    try {
+      const res = await fetch(`/api/shopify/products?ids=${ids.join(",")}`);
+      const data = await res.json();
+      setResolvedProducts(data.products || []);
+    } catch (err) {
+      console.error(err);
+    } finally {
+      setResolving(false);
+    }
   };
 
+  // --- Add a product ID ---
+  const addProductId = () => {
+    const id = newProductId.trim();
+    if (!id || isNaN(Number(id))) return;
+
+    const currentIds = productIds
+      ? productIds.split(",").map((s) => s.trim()).filter(Boolean)
+      : [];
+    
+    if (currentIds.includes(id)) {
+      setToast({ message: "Product ID already added", type: "error" });
+      return;
+    }
+
+    const updatedIds = [...currentIds, id];
+    setProductIds(updatedIds.join(", "));
+    setNewProductId("");
+
+    // Resolve the new product
+    resolveProducts(updatedIds.map(Number));
+  };
+
+  // --- Remove a product ---
+  const removeProduct = (productId: number) => {
+    const currentIds = productIds
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s && Number(s) !== productId);
+    
+    setProductIds(currentIds.join(", "));
+    setResolvedProducts((prev) => prev.filter((p) => p.id !== productId));
+  };
+
+  // --- Bulk paste IDs ---
+  const handleBulkPaste = () => {
+    const ids = productIds
+      .split(",")
+      .map((s) => s.trim())
+      .filter((s) => s && !isNaN(Number(s)))
+      .map(Number);
+
+    if (ids.length > 0) {
+      resolveProducts(ids);
+    }
+  };
+
+  // --- Save Permissions ---
   const handleSavePerms = async () => {
     if (!editingPublisher) return;
     setSavingPerms(true);
 
     try {
-      const productsToSave = Array.from(selectedProducts).map((id) => {
-        const product = products.find((p) => p.id === id);
-        return { id, title: product?.title || "" };
-      });
+      const productsToSave = resolvedProducts.map((p) => ({
+        id: p.id,
+        title: p.title,
+      }));
 
       const res = await fetch("/api/admin/permissions", {
         method: "PUT",
@@ -196,26 +235,6 @@ export default function PublishersPage() {
       setSavingPerms(false);
     }
   };
-
-  const refreshProducts = async () => {
-    setLoadingProducts(true);
-    try {
-      const res = await fetch("/api/shopify/products?refresh=true");
-      const data = await res.json();
-      setProducts(data.products || []);
-      setToast({ message: `Synced ${data.products?.length || 0} products from Shopify`, type: "success" });
-    } catch (err) {
-      console.error(err);
-    } finally {
-      setLoadingProducts(false);
-    }
-  };
-
-  const filteredProducts = products.filter(
-    (p) =>
-      p.title.toLowerCase().includes(permSearch.toLowerCase()) ||
-      (p.vendor && p.vendor.toLowerCase().includes(permSearch.toLowerCase()))
-  );
 
   if (loading) {
     return (
@@ -265,21 +284,14 @@ export default function PublishersPage() {
                   </div>
                 </div>
                 <div className="pub-actions">
-                  <button
-                    className="btn btn-secondary btn-sm"
-                    onClick={() => openPermissions(pub)}
-                    title="Edit product access"
-                  >
+                  <button className="btn btn-secondary btn-sm" onClick={() => openPermissions(pub)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z" />
+                      <path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7" />
+                      <path d="M18.5 2.5a2.121 2.121 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z" />
                     </svg>
                     Edit Products
                   </button>
-                  <button
-                    className="btn btn-danger btn-sm"
-                    onClick={() => handleDelete(pub)}
-                    title="Delete publisher"
-                  >
+                  <button className="btn btn-danger btn-sm" onClick={() => handleDelete(pub)}>
                     <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
                       <polyline points="3 6 5 6 21 6" /><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
                     </svg>
@@ -322,81 +334,115 @@ export default function PublishersPage() {
         </div>
       )}
 
-      {/* Edit Permissions Modal */}
+      {/* Edit Products Modal */}
       {editingPublisher && (
         <div className="modal-overlay" onClick={() => setEditingPublisher(null)}>
-          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 700, maxHeight: "90vh" }}>
-            <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: "1rem" }}>
-              <div>
-                <h2 style={{ marginBottom: "0.25rem" }}>Edit Products — {editingPublisher.name}</h2>
-                <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", margin: 0 }}>
-                  {selectedProducts.size} product{selectedProducts.size !== 1 ? "s" : ""} selected
-                </p>
-              </div>
-              <button className="btn btn-secondary btn-sm" onClick={refreshProducts} disabled={loadingProducts}>
-                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                  <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
-                </svg>
-                {loadingProducts ? "Syncing..." : "Sync from Shopify"}
+          <div className="modal" onClick={(e) => e.stopPropagation()} style={{ maxWidth: 600, maxHeight: "90vh" }}>
+            <h2 style={{ marginBottom: "0.25rem" }}>Edit Products — {editingPublisher.name}</h2>
+            <p style={{ fontSize: "0.8rem", color: "var(--text-muted)", marginBottom: "1.25rem" }}>
+              Enter Shopify Product IDs to track. Find IDs in Shopify Admin → Products → click a product → the ID is in the URL.
+            </p>
+
+            {/* Add single product ID */}
+            <div style={{ display: "flex", gap: "0.5rem", marginBottom: "1rem" }}>
+              <input
+                type="text"
+                value={newProductId}
+                onChange={(e) => setNewProductId(e.target.value.replace(/[^0-9]/g, ""))}
+                placeholder="Enter Product ID (e.g. 7599985295513)"
+                onKeyDown={(e) => e.key === "Enter" && (e.preventDefault(), addProductId())}
+                style={{
+                  flex: 1, padding: "0.65rem 1rem", background: "var(--bg-input)",
+                  border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
+                  color: "var(--text-primary)", fontSize: "0.85rem", fontFamily: "inherit", outline: "none",
+                }}
+              />
+              <button className="btn btn-primary btn-sm" onClick={addProductId} type="button">
+                Add
               </button>
             </div>
 
-            <div className="search-bar">
-              <svg className="search-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
-              </svg>
-              <input
-                type="text"
-                placeholder="Search products..."
-                value={permSearch}
-                onChange={(e) => setPermSearch(e.target.value)}
+            {/* Bulk paste area */}
+            <div className="form-group" style={{ marginBottom: "1rem" }}>
+              <label style={{ display: "flex", justifyContent: "space-between", alignItems: "center" }}>
+                <span>Product IDs (comma-separated)</span>
+                <button className="btn btn-secondary btn-sm" onClick={handleBulkPaste} type="button" disabled={resolving} style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}>
+                  {resolving ? "Resolving..." : "Resolve Names"}
+                </button>
+              </label>
+              <textarea
+                value={productIds}
+                onChange={(e) => setProductIds(e.target.value)}
+                placeholder="7599985295513, 7207875149977, 1194064904249"
+                rows={3}
+                style={{
+                  width: "100%", padding: "0.65rem 1rem", background: "var(--bg-input)",
+                  border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
+                  color: "var(--text-primary)", fontSize: "0.85rem", fontFamily: "'Inter', monospace",
+                  outline: "none", resize: "vertical",
+                }}
               />
             </div>
 
-            <div style={{ maxHeight: "50vh", overflowY: "auto", marginBottom: "1rem" }}>
-              {loadingProducts || loadingPerms ? (
-                <div className="loading-container">
-                  <div className="spinner" />
-                  <span>Loading products...</span>
+            {/* Resolved products list */}
+            {resolving && (
+              <div className="loading-container" style={{ padding: "1rem" }}>
+                <div className="spinner" />
+                <span>Fetching product names...</span>
+              </div>
+            )}
+
+            {!resolving && resolvedProducts.length > 0 && (
+              <div style={{ marginBottom: "1rem" }}>
+                <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", marginBottom: "0.5rem", textTransform: "uppercase", letterSpacing: "0.05em" }}>
+                  {resolvedProducts.length} Product{resolvedProducts.length !== 1 ? "s" : ""} Found
                 </div>
-              ) : filteredProducts.length === 0 ? (
-                <div className="empty-state">
-                  <h3>No products found</h3>
-                  <p>Try clicking &quot;Sync from Shopify&quot; to load your product catalog</p>
-                </div>
-              ) : (
-                <div className="permission-grid">
-                  {filteredProducts.map((product) => (
-                    <label
+                <div style={{ display: "flex", flexDirection: "column", gap: "0.4rem", maxHeight: "250px", overflowY: "auto" }}>
+                  {resolvedProducts.map((product) => (
+                    <div
                       key={product.id}
-                      className={`permission-product ${selectedProducts.has(product.id) ? "selected" : ""}`}
+                      style={{
+                        display: "flex", alignItems: "center", justifyContent: "space-between",
+                        padding: "0.6rem 0.75rem", background: "var(--bg-input)",
+                        border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
+                      }}
                     >
-                      <input
-                        type="checkbox"
-                        checked={selectedProducts.has(product.id)}
-                        onChange={() => toggleProduct(product.id)}
-                      />
-                      <div className="product-info">
-                        <div className="product-title">{product.title}</div>
-                        <div className="product-vendor">{product.vendor}</div>
+                      <div style={{ flex: 1, overflow: "hidden" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                          {product.title}
+                        </div>
+                        <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
+                          ID: {product.id} · {product.vendor}
+                        </div>
                       </div>
-                    </label>
+                      <button
+                        onClick={() => removeProduct(product.id)}
+                        style={{
+                          background: "none", border: "none", color: "var(--accent-rose)",
+                          cursor: "pointer", padding: "0.25rem", flexShrink: 0,
+                        }}
+                        title="Remove"
+                      >
+                        <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                          <line x1="18" y1="6" x2="6" y2="18" /><line x1="6" y1="6" x2="18" y2="18" />
+                        </svg>
+                      </button>
+                    </div>
                   ))}
                 </div>
-              )}
-            </div>
+              </div>
+            )}
 
             <div className="modal-actions">
               <button className="btn btn-secondary" onClick={() => setEditingPublisher(null)}>Cancel</button>
-              <button className="btn btn-primary" onClick={handleSavePerms} disabled={savingPerms}>
-                {savingPerms ? <><span className="spinner" /> Saving...</> : `Save (${selectedProducts.size} products)`}
+              <button className="btn btn-primary" onClick={handleSavePerms} disabled={savingPerms || resolvedProducts.length === 0}>
+                {savingPerms ? <><span className="spinner" /> Saving...</> : `Save ${resolvedProducts.length} Product${resolvedProducts.length !== 1 ? "s" : ""}`}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* Toast */}
       {toast && <div className={`toast ${toast.type}`}>{toast.message}</div>}
     </>
   );
