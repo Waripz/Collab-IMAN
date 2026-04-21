@@ -1,7 +1,17 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, apiError } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase-server";
+import { getShopifyToken } from "@/lib/shopify";
 
+const SHOP = process.env.SHOPIFY_SHOP!;
+const API_VERSION = "2024-01";
+
+/**
+ * GET /api/shopify/orders
+ * 
+ * Fetches orders DIRECTLY from Shopify (single fast request, like the Python script)
+ * then filters by the user's allowed product IDs.
+ */
 export async function GET(request: NextRequest) {
   try {
     const user = await getAuthUser(request);
@@ -41,27 +51,51 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Read from orders_cache in Supabase (fast!)
-    const { data: cachedOrders, error } = await supabase
-      .from("orders_cache")
-      .select("*")
-      .in("product_id", allowedProductIds)
-      .order("order_date", { ascending: false });
+    // --- Single fast fetch from Shopify (like the Python script) ---
+    const token = await getShopifyToken();
+    const url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/orders.json?status=any&limit=250`;
+    
+    const response = await fetch(url, {
+      headers: { "X-Shopify-Access-Token": token },
+      next: { revalidate: 60 }, // Cache for 60 seconds
+    });
 
-    if (error) {
-      console.error("Orders cache error:", error);
-      return apiError("Failed to fetch orders", 500);
+    if (!response.ok) {
+      throw new Error(`Shopify API error: ${response.status}`);
     }
 
-    const orders = (cachedOrders || []).map((o) => ({
-      date: o.order_date,
-      orderNumber: o.order_number,
-      productName: o.product_name,
-      productId: o.product_id,
-      quantity: o.quantity,
-      price: parseFloat(o.price),
-      channel: o.channel,
-    }));
+    const data = await response.json();
+    const shopifyOrders = data.orders || [];
+
+    // --- Filter by allowed products (same logic as Python script) ---
+    const allowedSet = new Set(allowedProductIds);
+    interface OrderItem {
+      date: string;
+      orderNumber: string;
+      productName: string;
+      productId: number;
+      quantity: number;
+      price: number;
+      channel: string;
+    }
+    
+    const orders: OrderItem[] = [];
+
+    for (const order of shopifyOrders) {
+      for (const item of order.line_items || []) {
+        if (allowedSet.has(item.product_id)) {
+          orders.push({
+            date: order.created_at,
+            orderNumber: order.name,
+            productName: item.title,
+            productId: item.product_id,
+            quantity: item.quantity,
+            price: parseFloat(item.price),
+            channel: order.source_name === "pos" ? "POS" : "Online",
+          });
+        }
+      }
+    }
 
     // Calculate summary
     const totalUnits = orders.reduce((sum, o) => sum + o.quantity, 0);
