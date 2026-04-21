@@ -112,10 +112,8 @@ export async function GET(request: NextRequest) {
             const key = `${order.name}_${item.product_id}_${item.id}`;
             if (!seenKeys.has(key)) {
               seenKeys.add(key);
-              // Calculate discounts from discount_allocations
-              const lineDiscount = (item.discount_allocations || []).reduce(
-                (sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0
-              );
+              // Use total_discount as it captures all applied discounts (line item + share of cart discounts)
+              const lineDiscount = parseFloat(item.total_discount || "0");
               orders.push({
                 date: order.created_at,
                 orderNumber: order.name,

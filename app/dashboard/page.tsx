@@ -55,7 +55,8 @@ export default function PublisherDashboard() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
-  const [activeTab, setActiveTab] = useState<"overview" | "orders">("overview");
+  const [currentPage, setCurrentPage] = useState(1);
+  const itemsPerPage = 25;
 
   // Date range — default last 30 days
   const today = new Date();
@@ -76,6 +77,7 @@ export default function PublisherDashboard() {
       .then((data) => {
         setOrders(data.orders || []);
         setSummary(data.summary);
+        setCurrentPage(1); // Reset page on new data
       })
       .catch(console.error)
       .finally(() => setLoading(false));
@@ -472,54 +474,12 @@ export default function PublisherDashboard() {
         </div>
       </div>
 
-      {/* Tabs: Charts & Order History */}
-      <div className="tabs">
-        <button className={`tab ${activeTab === "overview" ? "active" : ""}`} onClick={() => setActiveTab("overview")}>
-          Product Breakdown
-        </button>
-        <button className={`tab ${activeTab === "orders" ? "active" : ""}`} onClick={() => setActiveTab("orders")}>
-          Order History ({summary?.totalOrders || 0})
-        </button>
-      </div>
-
-      {activeTab === "overview" && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Revenue by Product</h2>
-          </div>
-          <div className="table-wrapper">
-            <table className="data-table">
-              <thead>
-                <tr>
-                  <th>Product</th>
-                  <th>Units</th>
-                  <th>Revenue (RM)</th>
-                  <th>Avg Price</th>
-                </tr>
-              </thead>
-              <tbody>
-                {Array.from(productIdMap.values()).map((data) => {
-                  const net = data.gross - data.discount;
-                  return (
-                    <tr key={data.name}>
-                      <td style={{ fontWeight: 500 }}>{data.name}</td>
-                      <td>{data.units.toLocaleString()}</td>
-                      <td>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                      <td>RM {(net / data.units).toFixed(2)}</td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
-          </div>
+      {/* Order History (Paginated) */}
+      {/* Order History */}
+      <div className="card">
+        <div className="card-header">
+          <h2>Order History</h2>
         </div>
-      )}
-
-      {activeTab === "orders" && (
-        <div className="card">
-          <div className="card-header">
-            <h2>Order History</h2>
-          </div>
           {orders.length === 0 ? (
             <div className="empty-state">
               <h3>No orders found</h3>
@@ -539,7 +499,7 @@ export default function PublisherDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {orders.map((order, i) => (
+                  {orders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((order, i) => (
                     <tr key={`${order.orderNumber}-${order.productId}-${i}`}>
                       <td>{new Date(order.date).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</td>
                       <td style={{ fontWeight: 500 }}>#{order.orderNumber.replace("#", "")}</td>
@@ -555,10 +515,34 @@ export default function PublisherDashboard() {
                   ))}
                 </tbody>
               </table>
+              
+              {/* Pagination Controls */}
+              {orders.length > itemsPerPage && (
+                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", borderTop: "1px solid #e3e3e3" }}>
+                  <span style={{ fontSize: "0.85rem", color: "#616161" }}>
+                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, orders.length)} of {orders.length} orders
+                  </span>
+                  <div style={{ display: "flex", gap: "0.5rem" }}>
+                    <button 
+                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                      disabled={currentPage === 1}
+                      style={{ padding: "0.4rem 0.8rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage === 1 ? "#f9fafb" : "white", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: "0.85rem" }}
+                    >
+                      Previous
+                    </button>
+                    <button 
+                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(orders.length / itemsPerPage), p + 1))}
+                      disabled={currentPage >= Math.ceil(orders.length / itemsPerPage)}
+                      style={{ padding: "0.4rem 0.8rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "#f9fafb" : "white", cursor: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "not-allowed" : "pointer", fontSize: "0.85rem" }}
+                    >
+                      Next
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
           )}
         </div>
-      )}
     </>
   );
 }
