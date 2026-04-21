@@ -10,7 +10,8 @@ const API_VERSION = "2024-01";
  * GET /api/shopify/orders
  * 
  * Fetches orders from Shopify, filtered by user's allowed product IDs.
- * ?limit=250|500|1000|2000 (default 250)
+ * ?from=2024-01-01&to=2024-12-31  (date range filter)
+ * Paginates automatically to get ALL orders within the date range.
  */
 export async function GET(request: NextRequest) {
   try {
@@ -51,14 +52,15 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Parse limit (max 2000, default 250)
-    const requestedLimit = Math.min(
-      Math.max(parseInt(request.nextUrl.searchParams.get("limit") || "250"), 250),
-      2000
-    );
-    const pages = Math.ceil(requestedLimit / 250);
+    // Build Shopify query params
+    const fromDate = request.nextUrl.searchParams.get("from");
+    const toDate = request.nextUrl.searchParams.get("to");
 
-    // Fetch orders from Shopify (paginated in batches of 250)
+    let baseParams = "status=any&limit=250";
+    if (fromDate) baseParams += `&created_at_min=${fromDate}T00:00:00+08:00`;
+    if (toDate) baseParams += `&created_at_max=${toDate}T23:59:59+08:00`;
+
+    // Fetch orders from Shopify with pagination
     const token = await getShopifyToken();
     const allowedSet = new Set(allowedProductIds);
 
@@ -74,13 +76,14 @@ export async function GET(request: NextRequest) {
 
     const orders: OrderItem[] = [];
     let pageInfo: string | null = null;
-    const seenKeys = new Set<string>(); // Dedup: order_number + product_id
+    const seenKeys = new Set<string>();
+    const MAX_PAGES = 20; // Safety cap: 20 pages = 5000 orders max
 
-    for (let page = 0; page < pages; page++) {
+    for (let page = 0; page < MAX_PAGES; page++) {
       let url: string;
 
       if (page === 0) {
-        url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/orders.json?status=any&limit=250`;
+        url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/orders.json?${baseParams}`;
       } else {
         url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/orders.json?limit=250&page_info=${pageInfo}`;
       }
@@ -95,6 +98,8 @@ export async function GET(request: NextRequest) {
 
       const data = await response.json();
       const shopifyOrders = data.orders || [];
+
+      if (shopifyOrders.length === 0) break;
 
       // Filter by allowed products + dedup
       for (const order of shopifyOrders) {
@@ -117,10 +122,9 @@ export async function GET(request: NextRequest) {
         }
       }
 
-      // Check for next page - must extract from rel="next" specifically
+      // Check for next page
       const linkHeader = response.headers.get("Link");
       if (linkHeader && linkHeader.includes('rel="next"')) {
-        // Split by comma to separate prev/next links, then find the "next" one
         const links = linkHeader.split(",");
         const nextLink = links.find((l) => l.includes('rel="next"'));
         if (nextLink) {
@@ -131,7 +135,7 @@ export async function GET(request: NextRequest) {
         }
         if (!pageInfo) break;
       } else {
-        break; // No more pages
+        break;
       }
     }
 

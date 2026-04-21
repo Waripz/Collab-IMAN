@@ -59,13 +59,24 @@ export default function PublisherDashboard() {
   const [event, setEvent] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "orders">("overview");
-  const [orderLimit, setOrderLimit] = useState(250);
   const chartRef = useRef(null);
 
-  const fetchOrders = (limit: number) => {
+  // Date range — default last 30 days
+  const today = new Date();
+  const thirtyDaysAgo = new Date(today);
+  thirtyDaysAgo.setDate(today.getDate() - 30);
+
+  const [fromDate, setFromDate] = useState(thirtyDaysAgo.toISOString().split("T")[0]);
+  const [toDate, setToDate] = useState(today.toISOString().split("T")[0]);
+
+  const fetchOrders = (from: string, to: string) => {
     setLoading(true);
+    const params = new URLSearchParams();
+    if (from) params.set("from", from);
+    if (to) params.set("to", to);
+
     Promise.all([
-      fetch(`/api/shopify/orders?limit=${limit}`).then((r) => r.json()),
+      fetch(`/api/shopify/orders?${params.toString()}`).then((r) => r.json()),
       fetch("/api/admin/event").then((r) => r.json()),
     ])
       .then(([ordersData, eventData]) => {
@@ -78,12 +89,31 @@ export default function PublisherDashboard() {
   };
 
   useEffect(() => {
-    fetchOrders(orderLimit);
+    fetchOrders(fromDate, toDate);
   }, []);
 
-  const handleLimitChange = (newLimit: number) => {
-    setOrderLimit(newLimit);
-    fetchOrders(newLimit);
+  const handleFilter = () => {
+    fetchOrders(fromDate, toDate);
+  };
+
+  // Quick presets
+  const setPreset = (days: number) => {
+    const end = new Date();
+    const start = new Date(end);
+    start.setDate(end.getDate() - days);
+    const from = start.toISOString().split("T")[0];
+    const to = end.toISOString().split("T")[0];
+    setFromDate(from);
+    setToDate(to);
+    fetchOrders(from, to);
+  };
+
+  const setAllTime = () => {
+    const from = "2020-01-01";
+    const to = new Date().toISOString().split("T")[0];
+    setFromDate(from);
+    setToDate(to);
+    fetchOrders(from, to);
   };
 
   if (loading) {
@@ -261,33 +291,67 @@ export default function PublisherDashboard() {
         </div>
       )}
 
-      <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
-        <div>
-          <h1>Your Performance</h1>
-          <p>Sales data for your assigned products</p>
-        </div>
-        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
-          <label style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Orders to scan:</label>
-          <select
-            value={orderLimit}
-            onChange={(e) => handleLimitChange(Number(e.target.value))}
-            disabled={loading}
-            style={{
-              padding: "0.5rem 0.75rem",
-              background: "var(--bg-input)",
-              border: "1px solid var(--border-subtle)",
-              borderRadius: "var(--radius-sm)",
-              color: "var(--text-primary)",
-              fontSize: "0.85rem",
-              cursor: "pointer",
-              outline: "none",
-            }}
-          >
-            <option value={250}>250 orders</option>
-            <option value={500}>500 orders</option>
-            <option value={1000}>1,000 orders</option>
-            <option value={2000}>2,000 orders</option>
-          </select>
+      <div className="page-header">
+        <h1>Your Performance</h1>
+        <p>Sales data for your assigned products</p>
+      </div>
+
+      {/* Date Range Filter */}
+      <div className="card" style={{ marginBottom: "1.5rem" }}>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexWrap: "wrap" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>From</label>
+            <input
+              type="date"
+              value={fromDate}
+              onChange={(e) => setFromDate(e.target.value)}
+              style={{
+                padding: "0.45rem 0.65rem", background: "var(--bg-input)",
+                border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
+                color: "var(--text-primary)", fontSize: "0.85rem", outline: "none",
+                colorScheme: "dark",
+              }}
+            />
+          </div>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>To</label>
+            <input
+              type="date"
+              value={toDate}
+              onChange={(e) => setToDate(e.target.value)}
+              style={{
+                padding: "0.45rem 0.65rem", background: "var(--bg-input)",
+                border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)",
+                color: "var(--text-primary)", fontSize: "0.85rem", outline: "none",
+                colorScheme: "dark",
+              }}
+            />
+          </div>
+          <button className="btn btn-primary btn-sm" onClick={handleFilter} disabled={loading}>
+            {loading ? "Loading..." : "Apply"}
+          </button>
+          <div style={{ borderLeft: "1px solid var(--border-subtle)", height: "24px" }} />
+          <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
+            {[7, 30, 90, 365].map((d) => (
+              <button
+                key={d}
+                className="btn btn-secondary btn-sm"
+                onClick={() => setPreset(d)}
+                disabled={loading}
+                style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
+              >
+                {d === 365 ? "1 Year" : `${d}D`}
+              </button>
+            ))}
+            <button
+              className="btn btn-secondary btn-sm"
+              onClick={setAllTime}
+              disabled={loading}
+              style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}
+            >
+              All Time
+            </button>
+          </div>
         </div>
       </div>
 
