@@ -107,13 +107,55 @@ export async function GET(request: NextRequest) {
         // Skip cancelled or fully refunded orders (Shopify Reports excludes these)
         if (order.cancelled_at || order.financial_status === "refunded") continue;
 
+        // Step 1: Calculate total allocated discounts vs order-level line_item discounts
+        // discount_applications tells us which discounts target line_items vs shipping
+        const orderTotalDiscount = parseFloat(order.total_discounts || "0");
+        let totalAllocated = 0;
+        let orderGross = 0;
+        for (const li of order.line_items || []) {
+          orderGross += parseFloat(li.price) * li.quantity;
+          totalAllocated += (li.discount_allocations || []).reduce(
+            (sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0
+          );
+        }
+
+        // Unallocated = order discounts targeting line_items that aren't in allocations
+        // (e.g., automatic "Buy More Save More" discounts)
+        // Exclude shipping discounts by checking discount_applications
+        let lineItemDiscountTotal = 0;
+        for (const app of order.discount_applications || []) {
+          if (app.target_type === "line_item") {
+            // This discount targets line items — its full value should be distributed
+          }
+        }
+        // Simple approach: unallocated line-item discount = order total - allocated - shipping discounts
+        let shippingDiscount = 0;
+        for (const app of order.discount_applications || []) {
+          if (app.target_type === "shipping_line") {
+            shippingDiscount += parseFloat(app.value || "0");
+          }
+        }
+        const unallocatedLineDiscount = Math.max(0, orderTotalDiscount - totalAllocated - shippingDiscount);
+
         for (const item of order.line_items || []) {
           if (allowedSet.has(item.product_id)) {
             const key = `${order.name}_${item.product_id}_${item.id}`;
             if (!seenKeys.has(key)) {
               seenKeys.add(key);
-              // Use total_discount as it captures all applied discounts (line item + share of cart discounts)
-              const lineDiscount = parseFloat(item.total_discount || "0");
+
+              // Primary: discount_allocations (has actual per-line discount amounts)
+              const allocatedDiscount = (item.discount_allocations || []).reduce(
+                (sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0
+              );
+
+              // Secondary: proportional share of unallocated line-item discounts
+              const itemGross = parseFloat(item.price) * item.quantity;
+              const proportionalShare = orderGross > 0
+                ? (itemGross / orderGross) * unallocatedLineDiscount
+                : 0;
+
+              const totalDiscount = allocatedDiscount + proportionalShare;
+
               orders.push({
                 date: order.created_at,
                 orderNumber: order.name,
@@ -121,7 +163,7 @@ export async function GET(request: NextRequest) {
                 productId: item.product_id,
                 quantity: item.quantity,
                 price: parseFloat(item.price),
-                discount: lineDiscount,
+                discount: Math.round(totalDiscount * 100) / 100,
                 channel: order.source_name === "pos" ? "POS" : "Online",
               });
             }
