@@ -102,8 +102,11 @@ export async function GET(request: NextRequest) {
 
       if (shopifyOrders.length === 0) break;
 
-      // Filter by allowed products + dedup
+      // Filter by allowed products + skip cancelled/refunded orders + dedup
       for (const order of shopifyOrders) {
+        // Skip cancelled or fully refunded orders (Shopify Reports excludes these)
+        if (order.cancelled_at || order.financial_status === "refunded") continue;
+
         for (const item of order.line_items || []) {
           if (allowedSet.has(item.product_id)) {
             const key = `${order.name}_${item.product_id}_${item.id}`;
