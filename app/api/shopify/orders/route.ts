@@ -149,11 +149,13 @@ export async function GET(request: NextRequest) {
     }
 
     // Calculate summary
+    // Shopify line_item.price = unit price BEFORE discounts
+    // So: gross = price × qty, net = gross - discounts
     const totalUnits = orders.reduce((sum, o) => sum + o.quantity, 0);
-    const totalRevenue = orders.reduce((sum, o) => sum + o.price * o.quantity, 0);
+    const grossSales = orders.reduce((sum, o) => sum + o.price * o.quantity, 0);
     const totalDiscounts = orders.reduce((sum, o) => sum + o.discount, 0);
-    const grossSales = totalRevenue + totalDiscounts;
-    const netSales = totalRevenue;
+    const netSales = grossSales - totalDiscounts;
+    const totalRevenue = netSales; // Revenue = what was actually earned
     const uniqueOrders = new Set(orders.map((o) => o.orderNumber));
 
     return NextResponse.json({

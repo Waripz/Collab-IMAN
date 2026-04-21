@@ -118,18 +118,19 @@ export default function PublisherDashboard() {
   // --- Data Preparation ---
 
   // Product breakdown by ID (with discounts)
-  const productIdMap = new Map<number, { name: string; units: number; revenue: number; discount: number }>();
+  // Note: item.price is BEFORE discounts, so price×qty = gross
+  const productIdMap = new Map<number, { name: string; units: number; gross: number; discount: number }>();
   for (const item of orders) {
-    const existing = productIdMap.get(item.productId) || { name: item.productName, units: 0, revenue: 0, discount: 0 };
+    const existing = productIdMap.get(item.productId) || { name: item.productName, units: 0, gross: 0, discount: 0 };
     productIdMap.set(item.productId, {
       name: existing.name,
       units: existing.units + item.quantity,
-      revenue: existing.revenue + item.price * item.quantity,
+      gross: existing.gross + item.price * item.quantity,
       discount: existing.discount + (item.discount || 0),
     });
   }
 
-  const products = Array.from(productIdMap.values()).sort((a, b) => b.revenue - a.revenue);
+  const products = Array.from(productIdMap.values()).sort((a, b) => (b.gross - b.discount) - (a.gross - a.discount));
 
   // Daily sales + AOV
   const dailySales = new Map<string, number>();
@@ -248,8 +249,8 @@ export default function PublisherDashboard() {
   const salesByProductData = {
     labels: products.map((p) => p.name.length > 50 ? p.name.slice(0, 50) + "..." : p.name),
     datasets: [{
-      label: "Revenue (RM)",
-      data: products.map((p) => Math.round(p.revenue * 100) / 100),
+      label: "Net Sales (RM)",
+      data: products.map((p) => Math.round((p.gross - p.discount) * 100) / 100),
       backgroundColor: productColors.slice(0, products.length),
       borderRadius: 4,
       borderSkipped: false as const,
@@ -414,7 +415,7 @@ export default function PublisherDashboard() {
                     <span style={{ fontSize: "0.78rem", color: "#3d3d3d" }}>{p.name}</span>
                   </div>
                   <span style={{ fontSize: "0.78rem", fontWeight: 600, color: "#1a1c1e" }}>
-                    RM {p.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    RM {(p.gross - p.discount).toLocaleString(undefined, { minimumFractionDigits: 2 })}
                   </span>
                 </div>
               ))}
@@ -452,17 +453,17 @@ export default function PublisherDashboard() {
               </tr>
               {/* Product Rows */}
               {products.map((p) => {
-                const gross = p.revenue + p.discount;
+                const net = p.gross - p.discount;
                 return (
                   <tr key={p.name}>
                     <td style={{ fontWeight: 500 }}>{p.name}</td>
                     <td style={{ textAlign: "right" }}>{p.units}</td>
-                    <td style={{ textAlign: "right" }}>RM {gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td style={{ textAlign: "right" }}>RM {p.gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td style={{ textAlign: "right", color: p.discount > 0 ? "#dc2626" : undefined }}>
                       {p.discount > 0 ? "-" : ""}RM {p.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
-                    <td style={{ textAlign: "right" }}>RM {p.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                    <td style={{ textAlign: "right", fontWeight: 600 }}>RM {p.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td style={{ textAlign: "right" }}>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   </tr>
                 );
               })}
@@ -497,14 +498,17 @@ export default function PublisherDashboard() {
                 </tr>
               </thead>
               <tbody>
-                {Array.from(productIdMap.values()).map((data) => (
-                  <tr key={data.name}>
-                    <td style={{ fontWeight: 500 }}>{data.name}</td>
-                    <td>{data.units.toLocaleString()}</td>
-                    <td>RM {data.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                    <td>RM {(data.revenue / data.units).toFixed(2)}</td>
-                  </tr>
-                ))}
+                {Array.from(productIdMap.values()).map((data) => {
+                  const net = data.gross - data.discount;
+                  return (
+                    <tr key={data.name}>
+                      <td style={{ fontWeight: 500 }}>{data.name}</td>
+                      <td>{data.units.toLocaleString()}</td>
+                      <td>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                      <td>RM {(net / data.units).toFixed(2)}</td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
