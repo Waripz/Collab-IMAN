@@ -118,6 +118,9 @@ export default function DashboardLayout({
           <button className="btn btn-secondary btn-sm btn-full" onClick={handleLogout}>
             Sign Out
           </button>
+          <div className="sidebar-footer">
+            <p>Created by Warip</p>
+          
         </div>
       </aside>
 
