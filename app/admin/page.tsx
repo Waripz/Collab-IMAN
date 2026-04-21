@@ -21,8 +21,11 @@ export default function AdminOverview() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [syncing, setSyncing] = useState(false);
+  const [syncResult, setSyncResult] = useState<string | null>(null);
 
-  useEffect(() => {
+  const fetchData = () => {
+    setLoading(true);
     Promise.all([
       fetch("/api/shopify/orders").then((r) => r.json()),
       fetch("/api/admin/publishers").then((r) => r.json()),
@@ -33,23 +36,74 @@ export default function AdminOverview() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchData();
   }, []);
+
+  const handleSync = async () => {
+    setSyncing(true);
+    setSyncResult(null);
+    try {
+      const res = await fetch("/api/admin/sync", { method: "POST" });
+      const data = await res.json();
+      if (res.ok) {
+        setSyncResult(`✅ Synced ${data.products} products & ${data.orders} order items`);
+        fetchData(); // Refresh dashboard with new data
+      } else {
+        setSyncResult(`❌ ${data.error || "Sync failed"}`);
+      }
+    } catch {
+      setSyncResult("❌ Network error during sync");
+    } finally {
+      setSyncing(false);
+    }
+  };
 
   if (loading) {
     return (
       <div className="loading-container">
         <div className="spinner" />
-        <span>Loading dashboard data...</span>
+        <span>Loading dashboard...</span>
       </div>
     );
   }
 
   return (
     <>
-      <div className="page-header">
-        <h1>Admin Overview</h1>
-        <p>Monitor all publisher performance at a glance</p>
+      <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between" }}>
+        <div>
+          <h1>Admin Overview</h1>
+          <p>Monitor all publisher performance at a glance</p>
+        </div>
+        <button
+          className="btn btn-primary"
+          onClick={handleSync}
+          disabled={syncing}
+          style={{ flexShrink: 0 }}
+        >
+          {syncing ? (
+            <>
+              <span className="spinner" />
+              Syncing Shopify...
+            </>
+          ) : (
+            <>
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <polyline points="23 4 23 10 17 10" /><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10" />
+              </svg>
+              Sync from Shopify
+            </>
+          )}
+        </button>
       </div>
+
+      {syncResult && (
+        <div className={`toast ${syncResult.startsWith("✅") ? "success" : "error"}`} style={{ position: "relative", bottom: "auto", right: "auto", marginBottom: "1.5rem" }}>
+          {syncResult}
+        </div>
+      )}
 
       <div className="stats-grid">
         <div className="stat-card blue">
@@ -140,17 +194,12 @@ export default function AdminOverview() {
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
               {publishers.slice(0, 5).map((pub) => (
                 <div key={pub.id} style={{
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "space-between",
-                  padding: "0.5rem 0.75rem",
-                  background: "var(--bg-input)",
-                  borderRadius: "var(--radius-sm)",
+                  display: "flex", alignItems: "center", justifyContent: "space-between",
+                  padding: "0.5rem 0.75rem", background: "var(--bg-input)", borderRadius: "var(--radius-sm)",
                 }}>
                   <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-                    <div className="avatar" style={{
-                      width: 28, height: 28, borderRadius: "50%",
-                      background: "var(--gradient-accent)",
+                    <div style={{
+                      width: 28, height: 28, borderRadius: "50%", background: "var(--gradient-accent)",
                       display: "flex", alignItems: "center", justifyContent: "center",
                       fontSize: "0.7rem", fontWeight: 700, color: "#0a0e1a"
                     }}>
@@ -163,6 +212,12 @@ export default function AdminOverview() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      <div className="card" style={{ marginTop: "0.5rem" }}>
+        <div style={{ fontSize: "0.75rem", color: "var(--text-muted)", textAlign: "center" }}>
+          💡 Data is loaded from cache. Click <strong>&quot;Sync from Shopify&quot;</strong> to pull latest orders & products.
         </div>
       </div>
     </>

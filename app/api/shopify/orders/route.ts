@@ -1,6 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, apiError } from "@/lib/auth";
-import { fetchAllOrders, filterOrdersByProducts } from "@/lib/shopify";
 import { createServiceClient } from "@/lib/supabase-server";
 
 export async function GET(request: NextRequest) {
@@ -14,7 +13,6 @@ export async function GET(request: NextRequest) {
     let allowedProductIds: number[] = [];
 
     if (user.role === "admin") {
-      // Admin can optionally filter by publisher_id query param
       const publisherId = request.nextUrl.searchParams.get("publisher_id");
       if (publisherId) {
         const { data } = await supabase
@@ -23,15 +21,12 @@ export async function GET(request: NextRequest) {
           .eq("user_id", publisherId);
         allowedProductIds = (data || []).map((d) => d.shopify_product_id);
       } else {
-        // Return all orders if no filter
         const { data } = await supabase
           .from("publisher_products")
           .select("shopify_product_id");
-        const allIds = (data || []).map((d) => d.shopify_product_id);
-        allowedProductIds = [...new Set(allIds)];
+        allowedProductIds = [...new Set((data || []).map((d) => d.shopify_product_id))];
       }
     } else {
-      // Publisher: only their assigned products
       const { data } = await supabase
         .from("publisher_products")
         .select("shopify_product_id")
@@ -40,36 +35,47 @@ export async function GET(request: NextRequest) {
     }
 
     if (allowedProductIds.length === 0) {
-      return NextResponse.json({ orders: [], summary: { totalUnits: 0, totalRevenue: 0, totalOrders: 0 } });
+      return NextResponse.json({
+        orders: [],
+        summary: { totalUnits: 0, totalRevenue: 0, totalOrders: 0, onlineOrders: 0, posOrders: 0 },
+      });
     }
 
-    // Get event date range
-    const { data: eventSettings } = await supabase
-      .from("event_settings")
-      .select("start_date, end_date")
-      .limit(1)
-      .single();
+    // Read from orders_cache in Supabase (fast!)
+    const { data: cachedOrders, error } = await supabase
+      .from("orders_cache")
+      .select("*")
+      .in("product_id", allowedProductIds)
+      .order("order_date", { ascending: false });
 
-    const sinceDate = request.nextUrl.searchParams.get("since") || eventSettings?.start_date || undefined;
-    const untilDate = request.nextUrl.searchParams.get("until") || eventSettings?.end_date || undefined;
+    if (error) {
+      console.error("Orders cache error:", error);
+      return apiError("Failed to fetch orders", 500);
+    }
 
-    // Fetch and filter orders
-    const allOrders = await fetchAllOrders(sinceDate, untilDate);
-    const filtered = filterOrdersByProducts(allOrders, allowedProductIds);
+    const orders = (cachedOrders || []).map((o) => ({
+      date: o.order_date,
+      orderNumber: o.order_number,
+      productName: o.product_name,
+      productId: o.product_id,
+      quantity: o.quantity,
+      price: parseFloat(o.price),
+      channel: o.channel,
+    }));
 
     // Calculate summary
-    const totalUnits = filtered.reduce((sum, o) => sum + o.quantity, 0);
-    const totalRevenue = filtered.reduce((sum, o) => sum + o.price * o.quantity, 0);
-    const uniqueOrders = new Set(filtered.map((o) => o.orderNumber));
+    const totalUnits = orders.reduce((sum, o) => sum + o.quantity, 0);
+    const totalRevenue = orders.reduce((sum, o) => sum + o.price * o.quantity, 0);
+    const uniqueOrders = new Set(orders.map((o) => o.orderNumber));
 
     return NextResponse.json({
-      orders: filtered,
+      orders,
       summary: {
         totalUnits,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
         totalOrders: uniqueOrders.size,
-        onlineOrders: filtered.filter((o) => o.channel === "Online").length,
-        posOrders: filtered.filter((o) => o.channel === "POS").length,
+        onlineOrders: orders.filter((o) => o.channel === "Online").length,
+        posOrders: orders.filter((o) => o.channel === "POS").length,
       },
     });
   } catch (err) {
