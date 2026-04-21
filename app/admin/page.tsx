@@ -129,12 +129,12 @@ export default function AdminOverview() {
 
         <div className="card">
           <div className="card-header">
-            <h2>Publisher Summary</h2>
+            <h2>Colaborator Summary</h2>
           </div>
           {publishers.length === 0 ? (
             <div className="empty-state">
-              <h3>No Publishers Yet</h3>
-              <p>Add publishers from the Publishers page</p>
+              <h3>No Colaborator Yet</h3>
+              <p>Add publishers from the Colaborators page</p>
             </div>
           ) : (
             <div style={{ display: "flex", flexDirection: "column", gap: "0.5rem" }}>
