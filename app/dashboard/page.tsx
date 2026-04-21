@@ -59,11 +59,13 @@ export default function PublisherDashboard() {
   const [event, setEvent] = useState<EventData | null>(null);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<"overview" | "orders">("overview");
+  const [orderLimit, setOrderLimit] = useState(250);
   const chartRef = useRef(null);
 
-  useEffect(() => {
+  const fetchOrders = (limit: number) => {
+    setLoading(true);
     Promise.all([
-      fetch("/api/shopify/orders").then((r) => r.json()),
+      fetch(`/api/shopify/orders?limit=${limit}`).then((r) => r.json()),
       fetch("/api/admin/event").then((r) => r.json()),
     ])
       .then(([ordersData, eventData]) => {
@@ -73,7 +75,16 @@ export default function PublisherDashboard() {
       })
       .catch(console.error)
       .finally(() => setLoading(false));
+  };
+
+  useEffect(() => {
+    fetchOrders(orderLimit);
   }, []);
+
+  const handleLimitChange = (newLimit: number) => {
+    setOrderLimit(newLimit);
+    fetchOrders(newLimit);
+  };
 
   if (loading) {
     return (
@@ -250,9 +261,34 @@ export default function PublisherDashboard() {
         </div>
       )}
 
-      <div className="page-header">
-        <h1>Your Performance</h1>
-        <p>Sales data for your assigned products</p>
+      <div className="page-header" style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", flexWrap: "wrap", gap: "1rem" }}>
+        <div>
+          <h1>Your Performance</h1>
+          <p>Sales data for your assigned products</p>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "0.75rem", flexShrink: 0 }}>
+          <label style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Orders to scan:</label>
+          <select
+            value={orderLimit}
+            onChange={(e) => handleLimitChange(Number(e.target.value))}
+            disabled={loading}
+            style={{
+              padding: "0.5rem 0.75rem",
+              background: "var(--bg-input)",
+              border: "1px solid var(--border-subtle)",
+              borderRadius: "var(--radius-sm)",
+              color: "var(--text-primary)",
+              fontSize: "0.85rem",
+              cursor: "pointer",
+              outline: "none",
+            }}
+          >
+            <option value={250}>250 orders</option>
+            <option value={500}>500 orders</option>
+            <option value={1000}>1,000 orders</option>
+            <option value={2000}>2,000 orders</option>
+          </select>
+        </div>
       </div>
 
       {/* Stats Cards */}
