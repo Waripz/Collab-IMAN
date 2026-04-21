@@ -2,8 +2,12 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Publisher Collab Dashboard",
+  title: "IMAN Collab",
   description: "Track your product performance on Shopify — Iman Shoppe Bookstore",
+  icons: {
+    icon: "/icon.png",
+    apple: "/icon.png",
+  },
 };
 
 export default function RootLayout({

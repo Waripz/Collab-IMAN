@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useCallback } from "react";
 import { useRouter, usePathname } from "next/navigation";
+import Link from "next/link";
 
 interface User {
   id: string;
@@ -95,7 +96,7 @@ export default function DashboardLayout({
 
         <nav className="sidebar-nav">
           {navItems.map((item) => (
-            <a
+            <Link
               key={item.href}
               href={item.href}
               className={pathname === item.href ? "active" : ""}
@@ -103,7 +104,7 @@ export default function DashboardLayout({
             >
               {item.icon}
               {item.label}
-            </a>
+            </Link>
           ))}
         </nav>
 

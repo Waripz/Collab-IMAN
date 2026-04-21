@@ -127,19 +127,20 @@ export default function PublisherDashboard() {
 
   // --- Chart Data Preparation ---
 
-  // Product breakdown
-  const productMap = new Map<string, { units: number; revenue: number }>();
+  // Product breakdown — group by productId to avoid duplicates from title variations
+  const productIdMap = new Map<number, { name: string; units: number; revenue: number }>();
   for (const item of orders) {
-    const existing = productMap.get(item.productName) || { units: 0, revenue: 0 };
-    productMap.set(item.productName, {
+    const existing = productIdMap.get(item.productId) || { name: item.productName, units: 0, revenue: 0 };
+    productIdMap.set(item.productId, {
+      name: existing.name,
       units: existing.units + item.quantity,
       revenue: existing.revenue + item.price * item.quantity,
     });
   }
 
-  const productNames = Array.from(productMap.keys());
-  const productUnits = productNames.map((n) => productMap.get(n)!.units);
-  const productRevenue = productNames.map((n) => productMap.get(n)!.revenue);
+  const productNames = Array.from(productIdMap.values()).map((p) => p.name);
+  const productUnits = Array.from(productIdMap.values()).map((p) => p.units);
+  const productRevenue = Array.from(productIdMap.values()).map((p) => p.revenue);
 
   const chartColors = [
     "rgba(56, 189, 248, 0.8)",
@@ -292,7 +293,7 @@ export default function PublisherDashboard() {
       )}
 
       <div className="page-header">
-        <h1>Your Performance</h1>
+        <h1>Products Performance</h1>
         <p>Sales data for your assigned products</p>
       </div>
 
@@ -491,11 +492,10 @@ export default function PublisherDashboard() {
                   </tr>
                 </thead>
                 <tbody>
-                  {productNames.map((name) => {
-                    const data = productMap.get(name)!;
+                  {Array.from(productIdMap.values()).map((data) => {
                     return (
-                      <tr key={name}>
-                        <td style={{ fontWeight: 500 }}>{name}</td>
+                      <tr key={data.name}>
+                        <td style={{ fontWeight: 500 }}>{data.name}</td>
                         <td>{data.units.toLocaleString()}</td>
                         <td>RM {data.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                         <td>RM {(data.revenue / data.units).toFixed(2)}</td>
