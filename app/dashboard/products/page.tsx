@@ -70,17 +70,17 @@ export default function PublisherProductsPage() {
                   style={{
                     width: 80,
                     height: 80,
-                    borderRadius: "var(--radius-sm)",
-                    background: product.image ? `url(${product.image}) center/cover` : "var(--bg-input)",
+                    borderRadius: "6px",
+                    background: product.image ? `url(${product.image}) center/cover` : "#f3f4f6",
                     flexShrink: 0,
                     display: "flex",
                     alignItems: "center",
                     justifyContent: "center",
-                    border: "1px solid var(--border-subtle)",
+                    border: "1px solid #e5e7eb",
                   }}
                 >
                   {!product.image && (
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="var(--text-muted)" strokeWidth="1.5">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="1.5">
                       <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
                     </svg>
                   )}
@@ -89,54 +89,54 @@ export default function PublisherProductsPage() {
                 {/* Product Details */}
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ display: "flex", alignItems: "flex-start", justifyContent: "space-between", gap: "1rem", marginBottom: "0.5rem" }}>
-                    <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "var(--text-primary)", lineHeight: 1.3 }}>
+                    <h3 style={{ fontSize: "1rem", fontWeight: 700, color: "#1a1c1e", lineHeight: 1.3 }}>
                       {product.title}
                     </h3>
                     <span
                       className="badge"
                       style={{
-                        background: product.status === "active" ? "rgba(52, 211, 153, 0.1)" : "rgba(251, 191, 36, 0.1)",
-                        color: product.status === "active" ? "var(--accent-green)" : "var(--accent-amber)",
+                        background: product.status === "active" ? "rgba(16, 185, 129, 0.1)" : "rgba(245, 158, 11, 0.1)",
+                        color: product.status === "active" ? "#059669" : "#d97706",
                         flexShrink: 0,
                       }}
                     >
-                      {product.status}
+                      {product.status.toUpperCase()}
                     </span>
                   </div>
 
                   <div style={{ display: "flex", flexWrap: "wrap", gap: "1.5rem", fontSize: "0.8rem" }}>
                     <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
+                      <div style={{ color: "#9ca3af", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
                         price
                       </div>
-                      <div style={{ color: "var(--text-primary)", fontWeight: 600 }}>
+                      <div style={{ color: "#1a1c1e", fontWeight: 600 }}>
                         RM {parseFloat(product.price).toFixed(2)}
                       </div>
                     </div>
                     <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
+                      <div style={{ color: "#9ca3af", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
                         stock
                       </div>
                       <div style={{
-                        color: product.inventory > 10 ? "var(--accent-green)" : product.inventory > 0 ? "var(--accent-amber)" : "var(--accent-rose)",
+                        color: product.inventory > 10 ? "#059669" : product.inventory > 0 ? "#d97706" : "#dc2626",
                         fontWeight: 600,
                       }}>
                         {product.inventory} units
                       </div>
                     </div>
                     <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
+                      <div style={{ color: "#9ca3af", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
                         vendor
                       </div>
-                      <div style={{ color: "var(--text-secondary)" }}>
+                      <div style={{ color: "#4b5563" }}>
                         {product.vendor || "—"}
                       </div>
                     </div>
                     <div>
-                      <div style={{ color: "var(--text-muted)", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
+                      <div style={{ color: "#9ca3af", fontSize: "0.65rem", textTransform: "uppercase", letterSpacing: "0.05em", marginBottom: "0.15rem" }}>
                         type
                       </div>
-                      <div style={{ color: "var(--text-secondary)" }}>
+                      <div style={{ color: "#4b5563" }}>
                         {product.product_type || "—"}
                       </div>
                     </div>
@@ -147,12 +147,12 @@ export default function PublisherProductsPage() {
               {/* Footer */}
               <div style={{
                 padding: "0.6rem 1.25rem",
-                background: "rgba(0,0,0,0.15)",
-                borderTop: "1px solid var(--border-subtle)",
+                background: "#f9fafb",
+                borderTop: "1px solid #e5e7eb",
                 display: "flex",
                 justifyContent: "space-between",
                 fontSize: "0.7rem",
-                color: "var(--text-muted)",
+                color: "#9ca3af",
               }}>
                 <span>ID: {product.id}</span>
                 <span>Updated {formatDate(product.updated_at)}</span>
