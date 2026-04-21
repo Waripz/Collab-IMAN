@@ -42,6 +42,9 @@ interface OrderItem {
 interface Summary {
   totalUnits: number;
   totalRevenue: number;
+  grossSales: number;
+  totalDiscounts: number;
+  netSales: number;
   totalOrders: number;
   onlineOrders: number;
   posOrders: number;
@@ -415,6 +418,43 @@ export default function PublisherDashboard() {
               ))}
             </div>
           )}
+        </div>
+      </div>
+
+      {/* Total Sales Breakdown */}
+      <div className="card">
+        <div className="card-header">
+          <h2>Total sales breakdown</h2>
+        </div>
+        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
+          {[
+            { label: "Gross sales", value: summary?.grossSales || 0, color: "#1a73e8" },
+            { label: "Discounts", value: -(summary?.totalDiscounts || 0), color: "#dc2626", isNegative: true },
+            { label: "Net sales", value: summary?.netSales || 0, color: "#1a1c1e", bold: true },
+            { label: "Total sales", value: summary?.totalRevenue || 0, color: "#1a1c1e", bold: true, border: true },
+          ].map((row, i) => (
+            <div key={row.label} style={{
+              display: "flex", justifyContent: "space-between", alignItems: "center",
+              padding: "0.75rem 0",
+              borderTop: i > 0 ? "1px solid #e3e3e3" : "none",
+              ...(row.border ? { borderTop: "2px solid #1a1c1e", marginTop: "0.25rem" } : {}),
+            }}>
+              <span style={{
+                fontSize: "0.85rem",
+                color: row.isNegative ? "#dc2626" : row.bold ? "#1a1c1e" : "#616161",
+                fontWeight: row.bold ? 600 : 400,
+              }}>
+                {row.label}
+              </span>
+              <span style={{
+                fontSize: "0.85rem",
+                fontWeight: row.bold ? 700 : 500,
+                color: row.isNegative ? "#dc2626" : "#1a1c1e",
+              }}>
+                {row.isNegative ? "-" : ""}RM {Math.abs(row.value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
+              </span>
+            </div>
+          ))}
         </div>
       </div>
 

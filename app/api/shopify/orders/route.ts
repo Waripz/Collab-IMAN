@@ -71,6 +71,7 @@ export async function GET(request: NextRequest) {
       productId: number;
       quantity: number;
       price: number;
+      discount: number;
       channel: string;
     }
 
@@ -108,6 +109,10 @@ export async function GET(request: NextRequest) {
             const key = `${order.name}_${item.product_id}_${item.id}`;
             if (!seenKeys.has(key)) {
               seenKeys.add(key);
+              // Calculate discounts from discount_allocations
+              const lineDiscount = (item.discount_allocations || []).reduce(
+                (sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0
+              );
               orders.push({
                 date: order.created_at,
                 orderNumber: order.name,
@@ -115,6 +120,7 @@ export async function GET(request: NextRequest) {
                 productId: item.product_id,
                 quantity: item.quantity,
                 price: parseFloat(item.price),
+                discount: lineDiscount,
                 channel: order.source_name === "pos" ? "POS" : "Online",
               });
             }
@@ -142,6 +148,9 @@ export async function GET(request: NextRequest) {
     // Calculate summary
     const totalUnits = orders.reduce((sum, o) => sum + o.quantity, 0);
     const totalRevenue = orders.reduce((sum, o) => sum + o.price * o.quantity, 0);
+    const totalDiscounts = orders.reduce((sum, o) => sum + o.discount, 0);
+    const grossSales = totalRevenue + totalDiscounts;
+    const netSales = totalRevenue;
     const uniqueOrders = new Set(orders.map((o) => o.orderNumber));
 
     return NextResponse.json({
@@ -149,6 +158,9 @@ export async function GET(request: NextRequest) {
       summary: {
         totalUnits,
         totalRevenue: Math.round(totalRevenue * 100) / 100,
+        grossSales: Math.round(grossSales * 100) / 100,
+        totalDiscounts: Math.round(totalDiscounts * 100) / 100,
+        netSales: Math.round(netSales * 100) / 100,
         totalOrders: uniqueOrders.size,
         onlineOrders: orders.filter((o) => o.channel === "Online").length,
         posOrders: orders.filter((o) => o.channel === "POS").length,
