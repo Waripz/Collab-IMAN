@@ -80,7 +80,7 @@ export default function DashboardLayout({
 
       <aside className={`sidebar ${sidebarOpen ? "open" : ""}`}>
         <div className="sidebar-header">
-          <h2>Publisher Collab</h2>
+          <h2>IMAN <span style={{ color: "var(--brand-pink)" }}>Collab</span></h2>
           <span className="role-badge publisher">Publisher</span>
         </div>
 

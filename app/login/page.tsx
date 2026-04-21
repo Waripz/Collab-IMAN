@@ -29,12 +29,7 @@ export default function LoginPage() {
         return;
       }
 
-      // Redirect based on role
-      if (data.role === "admin") {
-        router.push("/admin");
-      } else {
-        router.push("/dashboard");
-      }
+      router.push(data.role === "admin" ? "/admin" : "/dashboard");
     } catch {
       setError("Network error. Please try again.");
     } finally {
@@ -43,23 +38,22 @@ export default function LoginPage() {
   };
 
   return (
-    <div className="login-container">
+    <div className="login-page">
       <div className="login-card">
-        <div className="logo-icon">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" strokeLinecap="round" strokeLinejoin="round">
-            <path d="M4 19.5v-15A2.5 2.5 0 0 1 6.5 2H20v20H6.5a2.5 2.5 0 0 1 0-5H20" />
-            <path d="M8 7h6" />
-            <path d="M8 11h8" />
-          </svg>
+        <div className="brand">
+          <div className="logo-icon">
+            <svg viewBox="0 0 24 24" width="24" height="24" fill="white">
+              <path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm-2 14l-4-4 1.41-1.41L10 13.17l6.59-6.59L18 8l-8 8z" />
+            </svg>
+          </div>
+          <h1>IMAN <span className="pink">Collab</span></h1>
+          <p>Publisher Performance Dashboard</p>
         </div>
-        <h1>Publisher Collab</h1>
-        <p className="subtitle">Track your product performance</p>
 
         <form onSubmit={handleSubmit}>
           <div className="form-group">
-            <label htmlFor="email">Email</label>
+            <label>Email</label>
             <input
-              id="email"
               type="email"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
@@ -68,11 +62,9 @@ export default function LoginPage() {
               autoFocus
             />
           </div>
-
           <div className="form-group">
-            <label htmlFor="password">Password</label>
+            <label>Password</label>
             <input
-              id="password"
               type="password"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
@@ -81,33 +73,18 @@ export default function LoginPage() {
             />
           </div>
 
-          {error && (
-            <div className="form-error">
-              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                <circle cx="12" cy="12" r="10" />
-                <line x1="15" y1="9" x2="9" y2="15" />
-                <line x1="9" y1="9" x2="15" y2="15" />
-              </svg>
-              {error}
-            </div>
-          )}
+          {error && <div className="form-error">{error}</div>}
 
-          <div style={{ marginTop: "1.5rem" }}>
-            <button
-              type="submit"
-              className="btn btn-primary btn-full"
-              disabled={loading}
-            >
-              {loading ? (
-                <>
-                  <span className="spinner" />
-                  Signing in...
-                </>
-              ) : (
-                "Sign In"
-              )}
-            </button>
-          </div>
+          <button type="submit" className="btn btn-primary" disabled={loading}>
+            {loading ? (
+              <>
+                <span className="spinner" />
+                Signing in...
+              </>
+            ) : (
+              "Sign In"
+            )}
+          </button>
         </form>
       </div>
     </div>
