@@ -36,6 +36,7 @@ interface OrderItem {
   productId: number;
   quantity: number;
   price: number;
+  discount: number;
   channel: string;
 }
 
@@ -116,14 +117,15 @@ export default function PublisherDashboard() {
 
   // --- Data Preparation ---
 
-  // Product breakdown by ID
-  const productIdMap = new Map<number, { name: string; units: number; revenue: number }>();
+  // Product breakdown by ID (with discounts)
+  const productIdMap = new Map<number, { name: string; units: number; revenue: number; discount: number }>();
   for (const item of orders) {
-    const existing = productIdMap.get(item.productId) || { name: item.productName, units: 0, revenue: 0 };
+    const existing = productIdMap.get(item.productId) || { name: item.productName, units: 0, revenue: 0, discount: 0 };
     productIdMap.set(item.productId, {
       name: existing.name,
       units: existing.units + item.quantity,
       revenue: existing.revenue + item.price * item.quantity,
+      discount: existing.discount + (item.discount || 0),
     });
   }
 
@@ -421,40 +423,51 @@ export default function PublisherDashboard() {
         </div>
       </div>
 
-      {/* Total Sales Breakdown */}
+      {/* Total Sales Breakdown — Shopify Report Style */}
       <div className="card">
         <div className="card-header">
           <h2>Total sales breakdown</h2>
         </div>
-        <div style={{ display: "flex", flexDirection: "column", gap: 0 }}>
-          {[
-            { label: "Gross sales", value: summary?.grossSales || 0, color: "#1a73e8" },
-            { label: "Discounts", value: -(summary?.totalDiscounts || 0), color: "#dc2626", isNegative: true },
-            { label: "Net sales", value: summary?.netSales || 0, color: "#1a1c1e", bold: true },
-            { label: "Total sales", value: summary?.totalRevenue || 0, color: "#1a1c1e", bold: true, border: true },
-          ].map((row, i) => (
-            <div key={row.label} style={{
-              display: "flex", justifyContent: "space-between", alignItems: "center",
-              padding: "0.75rem 0",
-              borderTop: i > 0 ? "1px solid #e3e3e3" : "none",
-              ...(row.border ? { borderTop: "2px solid #1a1c1e", marginTop: "0.25rem" } : {}),
-            }}>
-              <span style={{
-                fontSize: "0.85rem",
-                color: row.isNegative ? "#dc2626" : row.bold ? "#1a1c1e" : "#616161",
-                fontWeight: row.bold ? 600 : 400,
-              }}>
-                {row.label}
-              </span>
-              <span style={{
-                fontSize: "0.85rem",
-                fontWeight: row.bold ? 700 : 500,
-                color: row.isNegative ? "#dc2626" : "#1a1c1e",
-              }}>
-                {row.isNegative ? "-" : ""}RM {Math.abs(row.value).toLocaleString(undefined, { minimumFractionDigits: 2 })}
-              </span>
-            </div>
-          ))}
+        <div className="table-wrapper">
+          <table className="data-table">
+            <thead>
+              <tr>
+                <th>Product title</th>
+                <th style={{ textAlign: "right" }}>Items sold</th>
+                <th style={{ textAlign: "right" }}>Gross sales</th>
+                <th style={{ textAlign: "right" }}>Discounts</th>
+                <th style={{ textAlign: "right" }}>Net sales</th>
+                <th style={{ textAlign: "right" }}>Total sales</th>
+              </tr>
+            </thead>
+            <tbody>
+              {/* Summary Row */}
+              <tr style={{ fontWeight: 600, background: "#f9fafb" }}>
+                <td style={{ fontWeight: 700, color: "#1a1c1e" }}>Summary</td>
+                <td style={{ textAlign: "right", color: "#1a1c1e" }}>{summary?.totalUnits || 0}</td>
+                <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {(summary?.grossSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style={{ textAlign: "right", color: "#dc2626" }}>-RM {(summary?.totalDiscounts || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {(summary?.netSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                <td style={{ textAlign: "right", color: "#1a1c1e", fontWeight: 700 }}>RM {(summary?.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+              </tr>
+              {/* Product Rows */}
+              {products.map((p) => {
+                const gross = p.revenue + p.discount;
+                return (
+                  <tr key={p.name}>
+                    <td style={{ fontWeight: 500 }}>{p.name}</td>
+                    <td style={{ textAlign: "right" }}>{p.units}</td>
+                    <td style={{ textAlign: "right" }}>RM {gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td style={{ textAlign: "right", color: p.discount > 0 ? "#dc2626" : undefined }}>
+                      {p.discount > 0 ? "-" : ""}RM {p.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
+                    </td>
+                    <td style={{ textAlign: "right" }}>RM {p.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                    <td style={{ textAlign: "right", fontWeight: 600 }}>RM {p.revenue.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       </div>
 
