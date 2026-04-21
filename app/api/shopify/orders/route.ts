@@ -74,6 +74,7 @@ export async function GET(request: NextRequest) {
 
     const orders: OrderItem[] = [];
     let pageInfo: string | null = null;
+    const seenKeys = new Set<string>(); // Dedup: order_number + product_id
 
     for (let page = 0; page < pages; page++) {
       let url: string;
@@ -95,28 +96,39 @@ export async function GET(request: NextRequest) {
       const data = await response.json();
       const shopifyOrders = data.orders || [];
 
-      // Filter by allowed products
+      // Filter by allowed products + dedup
       for (const order of shopifyOrders) {
         for (const item of order.line_items || []) {
           if (allowedSet.has(item.product_id)) {
-            orders.push({
-              date: order.created_at,
-              orderNumber: order.name,
-              productName: item.title,
-              productId: item.product_id,
-              quantity: item.quantity,
-              price: parseFloat(item.price),
-              channel: order.source_name === "pos" ? "POS" : "Online",
-            });
+            const key = `${order.name}_${item.product_id}_${item.id}`;
+            if (!seenKeys.has(key)) {
+              seenKeys.add(key);
+              orders.push({
+                date: order.created_at,
+                orderNumber: order.name,
+                productName: item.title,
+                productId: item.product_id,
+                quantity: item.quantity,
+                price: parseFloat(item.price),
+                channel: order.source_name === "pos" ? "POS" : "Online",
+              });
+            }
           }
         }
       }
 
-      // Check for next page
+      // Check for next page - must extract from rel="next" specifically
       const linkHeader = response.headers.get("Link");
       if (linkHeader && linkHeader.includes('rel="next"')) {
-        const match = linkHeader.match(/page_info=([^>&]*)/);
-        pageInfo = match ? match[1] : null;
+        // Split by comma to separate prev/next links, then find the "next" one
+        const links = linkHeader.split(",");
+        const nextLink = links.find((l) => l.includes('rel="next"'));
+        if (nextLink) {
+          const match = nextLink.match(/page_info=([^>&]*)/);
+          pageInfo = match ? match[1] : null;
+        } else {
+          pageInfo = null;
+        }
         if (!pageInfo) break;
       } else {
         break; // No more pages
