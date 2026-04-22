@@ -408,7 +408,7 @@ export default function PublishersPage() {
                       }}
                     >
                       <div style={{ flex: 1, overflow: "hidden" }}>
-                        <div style={{ fontSize: "0.85rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis" }}>
+                        <div style={{ fontSize: "0.85rem", fontWeight: 500, whiteSpace: "nowrap", overflow: "hidden", textOverflow: "ellipsis", color: "var(--text-primary)" }}>
                           {product.title}
                         </div>
                         <div style={{ fontSize: "0.7rem", color: "var(--text-muted)" }}>
