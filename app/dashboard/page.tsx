@@ -520,10 +520,34 @@ export default function PublisherDashboard() {
       </div>
 
       {/* Order History (Paginated) */}
-      {/* Order History */}
       <div className="card">
         <div className="card-header">
-          <h2>Order History</h2>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+            <h2>Order History</h2>
+            {orders.length > 0 && (
+              <span style={{ fontSize: "0.8rem", color: "#616161", fontWeight: 400 }}>
+                Showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, orders.length)} of {orders.length}
+              </span>
+            )}
+          </div>
+          {orders.length > itemsPerPage && (
+            <div style={{ display: "flex", gap: "0.5rem" }}>
+              <button 
+                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
+                disabled={currentPage === 1}
+                style={{ padding: "0.35rem 0.7rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage === 1 ? "#f9fafb" : "white", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: "0.8rem" }}
+              >
+                Previous
+              </button>
+              <button 
+                onClick={() => setCurrentPage(p => Math.min(Math.ceil(orders.length / itemsPerPage), p + 1))}
+                disabled={currentPage >= Math.ceil(orders.length / itemsPerPage)}
+                style={{ padding: "0.35rem 0.7rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "#f9fafb" : "white", cursor: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "not-allowed" : "pointer", fontSize: "0.8rem" }}
+              >
+                Next
+              </button>
+            </div>
+          )}
         </div>
           {orders.length === 0 ? (
             <div className="empty-state">
@@ -539,7 +563,8 @@ export default function PublisherDashboard() {
                     <th>Order</th>
                     <th>Product</th>
                     <th>Qty</th>
-                    <th>Price (RM)</th>
+                    <th style={{ textAlign: "right" }}>Price (RM)</th>
+                    <th style={{ textAlign: "right" }}>Discount (RM)</th>
                     <th>Channel</th>
                   </tr>
                 </thead>
@@ -550,7 +575,10 @@ export default function PublisherDashboard() {
                       <td style={{ fontWeight: 500 }}>#{order.orderNumber.replace("#", "")}</td>
                       <td>{order.productName}</td>
                       <td>{order.quantity}</td>
-                      <td>RM {(order.price * order.quantity).toFixed(2)}</td>
+                      <td style={{ textAlign: "right" }}>RM {(order.price * order.quantity).toFixed(2)}</td>
+                      <td style={{ textAlign: "right", color: order.discount > 0 ? "#dc2626" : undefined }}>
+                        {order.discount > 0 ? `-RM ${order.discount.toFixed(2)}` : "RM 0.00"}
+                      </td>
                       <td>
                         <span className={`badge ${order.channel === "Online" ? "badge-online" : "badge-pos"}`}>
                           {order.channel}
@@ -560,31 +588,6 @@ export default function PublisherDashboard() {
                   ))}
                 </tbody>
               </table>
-              
-              {/* Pagination Controls */}
-              {orders.length > itemsPerPage && (
-                <div style={{ display: "flex", justifyContent: "space-between", alignItems: "center", padding: "1rem", borderTop: "1px solid #e3e3e3" }}>
-                  <span style={{ fontSize: "0.85rem", color: "#616161" }}>
-                    Showing {(currentPage - 1) * itemsPerPage + 1} to {Math.min(currentPage * itemsPerPage, orders.length)} of {orders.length} orders
-                  </span>
-                  <div style={{ display: "flex", gap: "0.5rem" }}>
-                    <button 
-                      onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                      disabled={currentPage === 1}
-                      style={{ padding: "0.4rem 0.8rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage === 1 ? "#f9fafb" : "white", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: "0.85rem" }}
-                    >
-                      Previous
-                    </button>
-                    <button 
-                      onClick={() => setCurrentPage(p => Math.min(Math.ceil(orders.length / itemsPerPage), p + 1))}
-                      disabled={currentPage >= Math.ceil(orders.length / itemsPerPage)}
-                      style={{ padding: "0.4rem 0.8rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "#f9fafb" : "white", cursor: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "not-allowed" : "pointer", fontSize: "0.85rem" }}
-                    >
-                      Next
-                    </button>
-                  </div>
-                </div>
-              )}
             </div>
           )}
         </div>
