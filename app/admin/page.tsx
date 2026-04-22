@@ -60,6 +60,49 @@ export default function AdminOverview() {
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [loading, setLoading] = useState(true);
 
+  // Sync states
+  const [syncFromDate, setSyncFromDate] = useState("2024-01-01");
+  const [isSyncing, setIsSyncing] = useState(false);
+  const [syncProgress, setSyncProgress] = useState("");
+
+  const startSync = async () => {
+    if (!confirm("Start historical sync? This will run down the Shopify backlog in blocks of 5 pages.")) return;
+    setIsSyncing(true);
+    setSyncProgress("Starting sync...");
+    
+    let pageInfo = null;
+    let chunks = 0;
+    let totalFound = 0;
+    
+    try {
+      while (true) {
+        chunks++;
+        setSyncProgress(`Fetching block ${chunks} (up to 1,250 orders)... Found ${totalFound} tracked items so far.`);
+        const response: Response = await fetch("/api/admin/sync-chunk", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fromDate: syncFromDate, pageInfo })
+        });
+        
+        if (!response.ok) throw new Error("Sync failed. Check console.");
+        
+        const data = await response.json();
+        totalFound += data.itemsFound || 0;
+        
+        if (!data.nextPageInfo) {
+          setSyncProgress(`✅ Complete! Found ${totalFound} tracked items across the history.`);
+          break;
+        }
+        pageInfo = data.nextPageInfo;
+      }
+    } catch (err) {
+      setSyncProgress(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+    } finally {
+      setIsSyncing(false);
+      // Refresh the page data to show the new historical orders!
+      fetchData(fromDate, toDate);
+    }
+  };
   // Date range — default last 30 days
   const today = new Date();
   const thirtyDaysAgo = new Date(today);
@@ -314,6 +357,45 @@ export default function AdminOverview() {
               style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}>All Time</button>
           </div>
         </div>
+      </div>
+
+      {/* Admin Chunked History Sync */}
+      <div className="card" style={{ marginBottom: "2rem", border: "1px dashed var(--border-subtle)" }}>
+        <div className="card-header">
+          <div>
+            <h2>Store History Synchronizer</h2>
+            <span style={{ fontSize: "0.75rem", color: "var(--text-muted)" }}>
+              Downloads historical order backlog for newly assigned products in safe chunks.
+            </span>
+          </div>
+        </div>
+        <div style={{ display: "flex", alignItems: "center", gap: "1rem", flexWrap: "wrap", marginTop: "1rem" }}>
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.85rem", color: "var(--text-primary)" }}>Start Sync Back To:</label>
+            <input 
+              type="date" 
+              value={syncFromDate} 
+              onChange={(e) => setSyncFromDate(e.target.value)}
+              disabled={isSyncing}
+              style={{ padding: "0.45rem", background: "var(--bg-input)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)" }}
+            />
+          </div>
+          <button 
+            className="btn btn-primary" 
+            onClick={startSync} 
+            disabled={isSyncing}
+            style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}
+          >
+            {isSyncing ? <span className="spinner" style={{ width: 14, height: 14 }} /> : null}
+            {isSyncing ? "Syncing..." : "Start Sync"}
+          </button>
+        </div>
+        
+        {syncProgress && (
+          <div style={{ marginTop: "1rem", padding: "0.75rem", background: "rgba(56, 189, 248, 0.1)", borderLeft: "3px solid #38bdf8", borderRadius: "0 4px 4px 0", fontSize: "0.85rem", color: "#e2e8f0" }}>
+            {syncProgress}
+          </div>
+        )}
       </div>
 
       {/* Stats Cards */}

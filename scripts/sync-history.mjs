@@ -65,7 +65,32 @@ async function syncAllOrders() {
       }
 
       console.log(`\nFetching Page ${pages}...`);
-      const res = await fetch(url, { headers: { 'X-Shopify-Access-Token': token } });
+      let res;
+      let retries = 5;
+      while (retries > 0) {
+        try {
+          res = await fetch(url, { headers: { 'X-Shopify-Access-Token': token } });
+          if (res.ok) break;
+          // Handle rate limits (429) or other errors by retrying
+          if (res.status === 429) {
+            console.log(`Rate limited! Waiting 3 seconds...`);
+            await new Promise(r => setTimeout(r, 3000));
+          } else {
+            console.log(`Shopify API error ${res.status}. Retrying...`);
+            await new Promise(r => setTimeout(r, 2000));
+          }
+        } catch (e) {
+          console.log(`Network error: ${e.message}. Retrying...`);
+          await new Promise(r => setTimeout(r, 4000)); // Wait before retry on socket drop
+        }
+        retries--;
+      }
+
+      if (!res || !res.ok) {
+        console.error(`Failed to fetch page ${pages} after 5 retries. Aborting...`);
+        break;
+      }
+
       const data = await res.json();
       const shopifyOrders = data.orders || [];
 
@@ -130,8 +155,14 @@ async function syncAllOrders() {
 
       const linkHeader = res.headers.get("Link");
       if (linkHeader && linkHeader.includes('rel="next"')) {
-        const match = linkHeader.match(/page_info=([^>&]*)/);
-        pageInfo = match ? match[1] : null;
+        const links = linkHeader.split(",");
+        const nextLink = links.find(l => l.includes('rel="next"'));
+        if (nextLink) {
+          const match = nextLink.match(/page_info=([^>&]*)/);
+          pageInfo = match ? match[1] : null;
+        } else {
+          hasNext = false;
+        }
       } else {
         hasNext = false;
       }
