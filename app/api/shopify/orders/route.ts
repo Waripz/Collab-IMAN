@@ -1,4 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
+export const dynamic = "force-dynamic";
 import { getAuthUser, apiError } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase-server";
 import { getShopifyToken } from "@/lib/shopify";
@@ -78,7 +79,7 @@ export async function GET(request: NextRequest) {
     const orders: OrderItem[] = [];
     let pageInfo: string | null = null;
     const seenKeys = new Set<string>();
-    const MAX_PAGES = 40; // Safety cap: 40 pages = 10000 orders max
+    const MAX_PAGES = 20; // Safety cap: 40 pages = 10000 orders max
 
     for (let page = 0; page < MAX_PAGES; page++) {
       let url: string;
@@ -91,6 +92,7 @@ export async function GET(request: NextRequest) {
 
       const response = await fetch(url, {
         headers: { "X-Shopify-Access-Token": token },
+        cache: "no-store",
       });
 
       if (!response.ok) {
