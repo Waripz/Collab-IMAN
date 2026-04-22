@@ -268,6 +268,39 @@ export default function PublisherDashboard() {
   const avgOrderValue = summary && summary.totalOrders > 0
     ? (summary.totalRevenue / summary.totalOrders).toFixed(2) : "0.00";
 
+  const downloadCSV = () => {
+    const headers = ["Product Title", "Items Sold", "Gross Sales (RM)", "Discounts (RM)", "Net Sales (RM)", "Total Sales (RM)"];
+    const rows = products.map((p) => {
+      const net = p.gross - p.discount;
+      return [
+        `"${p.name.replace(/"/g, '""')}"`,
+        p.units,
+        p.gross.toFixed(2),
+        p.discount > 0 ? `-${p.discount.toFixed(2)}` : "0.00",
+        net.toFixed(2),
+        net.toFixed(2),
+      ].join(",");
+    });
+    // Add summary row
+    const summaryRow = [
+      "Summary",
+      summary?.totalUnits || 0,
+      (summary?.grossSales || 0).toFixed(2),
+      `-${(summary?.totalDiscounts || 0).toFixed(2)}`,
+      (summary?.netSales || 0).toFixed(2),
+      (summary?.totalRevenue || 0).toFixed(2),
+    ].join(",");
+
+    const csv = [headers.join(","), summaryRow, ...rows].join("\n");
+    const blob = new Blob([csv], { type: "text/csv;charset=utf-8;" });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = `sales-breakdown_${fromDate}_to_${toDate}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  };
+
   return (
     <>
       <div className="page-header">
@@ -436,6 +469,12 @@ export default function PublisherDashboard() {
       <div className="card">
         <div className="card-header">
           <h2>Total sales breakdown</h2>
+          <button className="btn btn-secondary btn-sm" onClick={downloadCSV} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+            </svg>
+            Download CSV
+          </button>
         </div>
         <div className="table-wrapper">
           <table className="data-table">
