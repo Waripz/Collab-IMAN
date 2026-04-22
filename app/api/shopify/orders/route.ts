@@ -78,7 +78,7 @@ export async function GET(request: NextRequest) {
     const orders: OrderItem[] = [];
     let pageInfo: string | null = null;
     const seenKeys = new Set<string>();
-    const MAX_PAGES = 20; // Safety cap: 20 pages = 5000 orders max
+    const MAX_PAGES = 40; // Safety cap: 40 pages = 10000 orders max
 
     for (let page = 0; page < MAX_PAGES; page++) {
       let url: string;
@@ -104,6 +104,12 @@ export async function GET(request: NextRequest) {
 
       // Filter by allowed products + skip cancelled/refunded orders + dedup
       for (const order of shopifyOrders) {
+        // DEBUG: Log orders that contain our tracked products but get filtered
+        const hasTrackedProduct = (order.line_items || []).some((li: { product_id: number }) => allowedSet.has(li.product_id));
+        if (hasTrackedProduct && (order.cancelled_at || order.financial_status === "refunded")) {
+          console.log(`[DEBUG] SKIPPED order ${order.name} | date: ${order.created_at} | cancelled_at: ${order.cancelled_at} | financial_status: ${order.financial_status}`);
+        }
+
         // Skip cancelled or fully refunded orders (Shopify Reports excludes these)
         if (order.cancelled_at || order.financial_status === "refunded") continue;
 
