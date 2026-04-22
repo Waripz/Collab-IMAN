@@ -79,7 +79,7 @@ export async function GET(request: NextRequest) {
     const orders: OrderItem[] = [];
     let pageInfo: string | null = null;
     const seenKeys = new Set<string>();
-    const MAX_PAGES = 20; // Safety cap: 40 pages = 10000 orders max
+    const MAX_PAGES = 40; // Safety cap: 40 pages = 10000 orders max
 
     for (let page = 0; page < MAX_PAGES; page++) {
       let url: string;
