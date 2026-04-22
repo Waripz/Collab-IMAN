@@ -3,7 +3,9 @@
 -- Run this in Supabase SQL Editor
 -- ============================================
 
-CREATE TABLE IF NOT EXISTS public.orders_cache (
+DROP TABLE IF EXISTS public.orders_cache CASCADE;
+
+CREATE TABLE public.orders_cache (
   id BIGSERIAL PRIMARY KEY,
   order_date TIMESTAMPTZ NOT NULL,
   order_number TEXT NOT NULL,
@@ -11,6 +13,7 @@ CREATE TABLE IF NOT EXISTS public.orders_cache (
   product_id BIGINT NOT NULL,
   quantity INT NOT NULL DEFAULT 0,
   price DECIMAL(10,2) NOT NULL DEFAULT 0,
+  discount DECIMAL(10,2) NOT NULL DEFAULT 0,
   channel TEXT NOT NULL DEFAULT 'Online',
   synced_at TIMESTAMPTZ DEFAULT NOW()
 );
