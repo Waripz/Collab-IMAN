@@ -65,6 +65,7 @@ export default function PublisherDashboard() {
 
   const [fromDate, setFromDate] = useState(thirtyDaysAgo.toISOString().split("T")[0]);
   const [toDate, setToDate] = useState(today.toISOString().split("T")[0]);
+  const [activePreset, setActivePreset] = useState<string>("30");
 
   const fetchOrders = (from: string, to: string) => {
     setLoading(true);
@@ -87,7 +88,10 @@ export default function PublisherDashboard() {
     fetchOrders(fromDate, toDate);
   }, []);
 
-  const handleFilter = () => fetchOrders(fromDate, toDate);
+  const handleFilter = () => {
+    setActivePreset("custom");
+    fetchOrders(fromDate, toDate);
+  };
 
   const setPreset = (days: number) => {
     const end = new Date();
@@ -97,6 +101,7 @@ export default function PublisherDashboard() {
     const to = end.toISOString().split("T")[0];
     setFromDate(from);
     setToDate(to);
+    setActivePreset(String(days));
     fetchOrders(from, to);
   };
 
@@ -105,6 +110,7 @@ export default function PublisherDashboard() {
     const to = new Date().toISOString().split("T")[0];
     setFromDate(from);
     setToDate(to);
+    setActivePreset("all");
     fetchOrders(from, to);
   };
 
@@ -288,13 +294,13 @@ export default function PublisherDashboard() {
           <div style={{ borderLeft: "1px solid #c9cccf", height: "24px" }} />
           <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
             {[7, 30, 90, 365].map((d) => (
-              <button key={d} className="btn btn-secondary btn-sm" onClick={() => setPreset(d)} disabled={loading}
-                style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", background: "#fff", color: "#3d3d3d", border: "1px solid #c9cccf" }}>
+              <button key={d} className={`btn btn-sm ${activePreset === String(d) ? "btn-primary" : "btn-secondary"}`} onClick={() => setPreset(d)} disabled={loading}
+                style={activePreset === String(d) ? { fontSize: "0.7rem", padding: "0.3rem 0.6rem" } : { fontSize: "0.7rem", padding: "0.3rem 0.6rem", background: "#fff", color: "#3d3d3d", border: "1px solid #c9cccf" }}>
                 {d === 365 ? "1 Year" : `${d}D`}
               </button>
             ))}
-            <button className="btn btn-secondary btn-sm" onClick={setAllTime} disabled={loading}
-              style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem", background: "#fff", color: "#3d3d3d", border: "1px solid #c9cccf" }}>
+            <button className={`btn btn-sm ${activePreset === "all" ? "btn-primary" : "btn-secondary"}`} onClick={setAllTime} disabled={loading}
+              style={activePreset === "all" ? { fontSize: "0.7rem", padding: "0.3rem 0.6rem" } : { fontSize: "0.7rem", padding: "0.3rem 0.6rem", background: "#fff", color: "#3d3d3d", border: "1px solid #c9cccf" }}>
               All Time
             </button>
           </div>

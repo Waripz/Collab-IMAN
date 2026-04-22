@@ -67,6 +67,7 @@ export default function AdminOverview() {
 
   const [fromDate, setFromDate] = useState(thirtyDaysAgo.toISOString().split("T")[0]);
   const [toDate, setToDate] = useState(today.toISOString().split("T")[0]);
+  const [activePreset, setActivePreset] = useState<string>("30");
 
   const fetchData = (from: string, to: string) => {
     setLoading(true);
@@ -91,7 +92,10 @@ export default function AdminOverview() {
     fetchData(fromDate, toDate);
   }, []);
 
-  const handleFilter = () => fetchData(fromDate, toDate);
+  const handleFilter = () => {
+    setActivePreset("custom");
+    fetchData(fromDate, toDate);
+  };
 
   const setPreset = (days: number) => {
     const end = new Date();
@@ -101,6 +105,7 @@ export default function AdminOverview() {
     const to = end.toISOString().split("T")[0];
     setFromDate(from);
     setToDate(to);
+    setActivePreset(String(days));
     fetchData(from, to);
   };
 
@@ -109,6 +114,7 @@ export default function AdminOverview() {
     const to = new Date().toISOString().split("T")[0];
     setFromDate(from);
     setToDate(to);
+    setActivePreset("all");
     fetchData(from, to);
   };
 
@@ -299,12 +305,12 @@ export default function AdminOverview() {
           <div style={{ borderLeft: "1px solid var(--border-subtle)", height: "24px" }} />
           <div style={{ display: "flex", gap: "0.35rem", flexWrap: "wrap" }}>
             {[7, 30, 90, 365].map((d) => (
-              <button key={d} className="btn btn-secondary btn-sm" onClick={() => setPreset(d)} disabled={loading}
+              <button key={d} className={`btn btn-sm ${activePreset === String(d) ? "btn-primary" : "btn-secondary"}`} onClick={() => setPreset(d)} disabled={loading}
                 style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}>
                 {d === 365 ? "1 Year" : `${d}D`}
               </button>
             ))}
-            <button className="btn btn-secondary btn-sm" onClick={setAllTime} disabled={loading}
+            <button className={`btn btn-sm ${activePreset === "all" ? "btn-primary" : "btn-secondary"}`} onClick={setAllTime} disabled={loading}
               style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}>All Time</button>
           </div>
         </div>
