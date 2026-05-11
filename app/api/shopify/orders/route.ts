@@ -158,25 +158,39 @@ export async function GET(request: NextRequest) {
     }
 
     // 4. Finally, pull everything requested directly from Supabase! ⚡
-    const { data: cachedOrders, error: cacheErr } = await supabase
-      .from("orders_cache")
-      .select("*")
-      .in("product_id", allowedProductIds)
-      .gte("order_date", fromDateIso)
-      .lte("order_date", toDateIso)
-      .order("order_date", { ascending: false });
+    // Supabase has a default 1000-row limit, so we paginate to get ALL rows
+    const PAGE_SIZE = 1000;
+    let allCachedOrders: Record<string, unknown>[] = [];
+    let rangeStart = 0;
+    let hasMore = true;
 
-    if (cacheErr) throw new Error("Supabase error: " + cacheErr.message);
+    while (hasMore) {
+      const { data: page, error: pageErr } = await supabase
+        .from("orders_cache")
+        .select("*")
+        .in("product_id", allowedProductIds)
+        .gte("order_date", fromDateIso)
+        .lte("order_date", toDateIso)
+        .order("order_date", { ascending: false })
+        .range(rangeStart, rangeStart + PAGE_SIZE - 1);
 
-    const orders = (cachedOrders || []).map(o => ({
-      date: o.order_date,
-      orderNumber: o.order_number,
-      productName: o.product_name,
-      productId: o.product_id,
-      quantity: o.quantity,
+      if (pageErr) throw new Error("Supabase error: " + pageErr.message);
+
+      const rows = page || [];
+      allCachedOrders = allCachedOrders.concat(rows);
+      rangeStart += PAGE_SIZE;
+      hasMore = rows.length === PAGE_SIZE;
+    }
+
+    const orders = allCachedOrders.map(o => ({
+      date: o.order_date as string,
+      orderNumber: o.order_number as string,
+      productName: o.product_name as string,
+      productId: o.product_id as number,
+      quantity: o.quantity as number,
       price: Number(o.price),
       discount: Number(o.discount),
-      channel: o.channel
+      channel: o.channel as string
     }));
 
     const totalUnits = orders.reduce((sum, o) => sum + o.quantity, 0);
