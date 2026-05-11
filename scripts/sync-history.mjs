@@ -107,24 +107,8 @@ async function syncAllOrders() {
         const matchingItems = (o.line_items || []).filter(li => trackedIds.has(li.product_id));
         if (matchingItems.length === 0) continue;
 
-        const orderTotalDiscount = parseFloat(o.total_discounts || "0");
-        let totalAllocated = 0;
-        let orderGross = 0;
-        for (const li of o.line_items || []) {
-          orderGross += parseFloat(li.price) * li.quantity;
-          totalAllocated += (li.discount_allocations || []).reduce((sum, da) => sum + parseFloat(da.amount || "0"), 0);
-        }
-        let shippingDiscount = 0;
-        for (const app of o.discount_applications || []) {
-          if (app.target_type === "shipping_line") shippingDiscount += parseFloat(app.value || "0");
-        }
-        const unallocatedLineDiscount = Math.max(0, orderTotalDiscount - totalAllocated - shippingDiscount);
-
         for (const item of matchingItems) {
           const allocatedDiscount = (item.discount_allocations || []).reduce((sum, da) => sum + parseFloat(da.amount || "0"), 0);
-          const itemGross = parseFloat(item.price) * item.quantity;
-          const proportionalShare = orderGross > 0 ? (itemGross / orderGross) * unallocatedLineDiscount : 0;
-          const finalDiscount = allocatedDiscount + proportionalShare;
           
           validOrders.push({
             order_date: o.created_at,
@@ -133,7 +117,7 @@ async function syncAllOrders() {
             product_id: item.product_id,
             quantity: item.quantity,
             price: parseFloat(item.price),
-            discount: finalDiscount,
+            discount: allocatedDiscount,
             channel: o.source_name === "pos" ? "POS" : "Online",
             synced_at: new Date().toISOString()
           });

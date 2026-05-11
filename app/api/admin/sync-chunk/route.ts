@@ -79,23 +79,8 @@ export async function POST(request: NextRequest) {
         const matchingItems = (order.line_items || []).filter((li: { product_id: number }) => allowedSet.has(li.product_id));
         if (matchingItems.length === 0) continue;
 
-        const orderTotalDiscount = parseFloat(order.total_discounts || "0");
-        let totalAllocated = 0;
-        let orderGross = 0;
-        for (const li of order.line_items || []) {
-          orderGross += parseFloat(li.price) * li.quantity;
-          totalAllocated += (li.discount_allocations || []).reduce((sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0);
-        }
-        let shippingDiscount = 0;
-        for (const app of order.discount_applications || []) {
-          if (app.target_type === "shipping_line") shippingDiscount += parseFloat(app.value || "0");
-        }
-        const unallocatedLineDiscount = Math.max(0, orderTotalDiscount - totalAllocated - shippingDiscount);
-
         for (const item of matchingItems) {
           const allocatedDiscount = (item.discount_allocations || []).reduce((sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0);
-          const itemGross = parseFloat(item.price) * item.quantity;
-          const proportionalShare = orderGross > 0 ? (itemGross / orderGross) * unallocatedLineDiscount : 0;
 
           newValidOrders.push({
             order_date: order.created_at,
@@ -104,7 +89,7 @@ export async function POST(request: NextRequest) {
             product_id: item.product_id,
             quantity: item.quantity,
             price: parseFloat(item.price),
-            discount: allocatedDiscount + proportionalShare,
+            discount: allocatedDiscount,
             channel: order.source_name === "pos" ? "POS" : "Online",
             synced_at: new Date().toISOString()
           });
