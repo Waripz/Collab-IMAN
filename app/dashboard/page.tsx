@@ -56,6 +56,7 @@ export default function PublisherDashboard() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
+  const [searchQuery, setSearchQuery] = useState("");
   const itemsPerPage = 25;
 
   // Date range — default last 30 days
@@ -520,77 +521,123 @@ export default function PublisherDashboard() {
       </div>
 
       {/* Order History (Paginated) */}
-      <div className="card">
-        <div className="card-header">
-          <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
-            <h2>Order History</h2>
-            {orders.length > 0 && (
-              <span style={{ fontSize: "0.8rem", color: "#616161", fontWeight: 400 }}>
-                Showing {(currentPage - 1) * itemsPerPage + 1}–{Math.min(currentPage * itemsPerPage, orders.length)} of {orders.length}
-              </span>
+      {(() => {
+        const filteredOrders = searchQuery.trim()
+          ? orders.filter(o => o.orderNumber.toLowerCase().includes(searchQuery.toLowerCase().replace("#", "")))
+          : orders;
+        const totalPages = Math.ceil(filteredOrders.length / itemsPerPage);
+        const safePage = Math.min(currentPage, totalPages || 1);
+
+        // Build page numbers: show max 7 pages with ellipsis
+        const getPageNumbers = () => {
+          const pages: (number | string)[] = [];
+          if (totalPages <= 7) {
+            for (let i = 1; i <= totalPages; i++) pages.push(i);
+          } else {
+            pages.push(1);
+            if (safePage > 3) pages.push("...");
+            const start = Math.max(2, safePage - 1);
+            const end = Math.min(totalPages - 1, safePage + 1);
+            for (let i = start; i <= end; i++) pages.push(i);
+            if (safePage < totalPages - 2) pages.push("...");
+            pages.push(totalPages);
+          }
+          return pages;
+        };
+
+        const btnBase = { padding: "0.3rem 0.6rem", border: "1px solid #e3e3e3", borderRadius: "4px", fontSize: "0.8rem", cursor: "pointer", background: "white", color: "#3d3d3d" };
+        const btnActive = { ...btnBase, background: "#e91e8c", color: "white", border: "1px solid #e91e8c", fontWeight: 600 };
+        const btnDisabled = { ...btnBase, background: "#f9fafb", cursor: "not-allowed", color: "#c0c0c0" };
+
+        return (
+          <div className="card">
+            <div className="card-header" style={{ flexDirection: "column", alignItems: "stretch", gap: "0.75rem" }}>
+              <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", flexWrap: "wrap", gap: "0.75rem" }}>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.75rem" }}>
+                  <h2>Order History</h2>
+                  {filteredOrders.length > 0 && (
+                    <span style={{ fontSize: "0.8rem", color: "#616161", fontWeight: 400 }}>
+                      Showing {(safePage - 1) * itemsPerPage + 1}–{Math.min(safePage * itemsPerPage, filteredOrders.length)} of {filteredOrders.length}
+                    </span>
+                  )}
+                </div>
+                <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+                  {/* Search */}
+                  <div style={{ position: "relative" }}>
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)" }}>
+                      <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+                    </svg>
+                    <input
+                      type="text"
+                      placeholder="Search order ID..."
+                      value={searchQuery}
+                      onChange={(e) => { setSearchQuery(e.target.value); setCurrentPage(1); }}
+                      style={{ padding: "0.4rem 0.6rem 0.4rem 1.8rem", border: "1px solid #e3e3e3", borderRadius: "6px", fontSize: "0.82rem", outline: "none", width: "170px", color: "#1a1c1e", background: "white" }}
+                    />
+                  </div>
+                </div>
+              </div>
+              {/* Pagination */}
+              {totalPages > 1 && (
+                <div style={{ display: "flex", alignItems: "center", gap: "0.35rem", flexWrap: "wrap" }}>
+                  <button onClick={() => setCurrentPage(p => Math.max(1, p - 1))} disabled={safePage === 1}
+                    style={safePage === 1 ? btnDisabled : btnBase}>Previous</button>
+                  {getPageNumbers().map((p, i) =>
+                    typeof p === "string" ? (
+                      <span key={`ellipsis-${i}`} style={{ padding: "0 0.3rem", color: "#9ca3af", fontSize: "0.8rem" }}>…</span>
+                    ) : (
+                      <button key={p} onClick={() => setCurrentPage(p)} style={p === safePage ? btnActive : btnBase}>{p}</button>
+                    )
+                  )}
+                  <button onClick={() => setCurrentPage(p => Math.min(totalPages, p + 1))} disabled={safePage >= totalPages}
+                    style={safePage >= totalPages ? btnDisabled : btnBase}>Next</button>
+                </div>
+              )}
+            </div>
+            {filteredOrders.length === 0 ? (
+              <div className="empty-state">
+                <h3>{searchQuery ? "No matching orders" : "No orders found"}</h3>
+                <p>{searchQuery ? `No orders matching "${searchQuery}"` : "Try adjusting the date range"}</p>
+              </div>
+            ) : (
+              <div className="table-wrapper">
+                <table className="data-table">
+                  <thead>
+                    <tr>
+                      <th>Date</th>
+                      <th>Order</th>
+                      <th>Product</th>
+                      <th>Qty</th>
+                      <th style={{ textAlign: "right" }}>Price (RM)</th>
+                      <th style={{ textAlign: "right" }}>Discount (RM)</th>
+                      <th>Channel</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.slice((safePage - 1) * itemsPerPage, safePage * itemsPerPage).map((order, i) => (
+                      <tr key={`${order.orderNumber}-${order.productId}-${i}`}>
+                        <td>{new Date(order.date).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</td>
+                        <td style={{ fontWeight: 500 }}>#{order.orderNumber.replace("#", "")}</td>
+                        <td>{order.productName}</td>
+                        <td>{order.quantity}</td>
+                        <td style={{ textAlign: "right" }}>RM {(order.price * order.quantity).toFixed(2)}</td>
+                        <td style={{ textAlign: "right", color: order.discount > 0 ? "#dc2626" : undefined }}>
+                          {order.discount > 0 ? `-RM ${order.discount.toFixed(2)}` : "RM 0.00"}
+                        </td>
+                        <td>
+                          <span className={`badge ${order.channel === "Online" ? "badge-online" : "badge-pos"}`}>
+                            {order.channel}
+                          </span>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
-          {orders.length > itemsPerPage && (
-            <div style={{ display: "flex", gap: "0.5rem" }}>
-              <button 
-                onClick={() => setCurrentPage(p => Math.max(1, p - 1))}
-                disabled={currentPage === 1}
-                style={{ padding: "0.35rem 0.7rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage === 1 ? "#f9fafb" : "white", cursor: currentPage === 1 ? "not-allowed" : "pointer", fontSize: "0.8rem" }}
-              >
-                Previous
-              </button>
-              <button 
-                onClick={() => setCurrentPage(p => Math.min(Math.ceil(orders.length / itemsPerPage), p + 1))}
-                disabled={currentPage >= Math.ceil(orders.length / itemsPerPage)}
-                style={{ padding: "0.35rem 0.7rem", border: "1px solid #e3e3e3", borderRadius: "4px", background: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "#f9fafb" : "white", cursor: currentPage >= Math.ceil(orders.length / itemsPerPage) ? "not-allowed" : "pointer", fontSize: "0.8rem" }}
-              >
-                Next
-              </button>
-            </div>
-          )}
-        </div>
-          {orders.length === 0 ? (
-            <div className="empty-state">
-              <h3>No orders found</h3>
-              <p>Try adjusting the date range</p>
-            </div>
-          ) : (
-            <div className="table-wrapper">
-              <table className="data-table">
-                <thead>
-                  <tr>
-                    <th>Date</th>
-                    <th>Order</th>
-                    <th>Product</th>
-                    <th>Qty</th>
-                    <th style={{ textAlign: "right" }}>Price (RM)</th>
-                    <th style={{ textAlign: "right" }}>Discount (RM)</th>
-                    <th>Channel</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {orders.slice((currentPage - 1) * itemsPerPage, currentPage * itemsPerPage).map((order, i) => (
-                    <tr key={`${order.orderNumber}-${order.productId}-${i}`}>
-                      <td>{new Date(order.date).toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}</td>
-                      <td style={{ fontWeight: 500 }}>#{order.orderNumber.replace("#", "")}</td>
-                      <td>{order.productName}</td>
-                      <td>{order.quantity}</td>
-                      <td style={{ textAlign: "right" }}>RM {(order.price * order.quantity).toFixed(2)}</td>
-                      <td style={{ textAlign: "right", color: order.discount > 0 ? "#dc2626" : undefined }}>
-                        {order.discount > 0 ? `-RM ${order.discount.toFixed(2)}` : "RM 0.00"}
-                      </td>
-                      <td>
-                        <span className={`badge ${order.channel === "Online" ? "badge-online" : "badge-pos"}`}>
-                          {order.channel}
-                        </span>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-        </div>
+        );
+      })()}
     </>
   );
 }
