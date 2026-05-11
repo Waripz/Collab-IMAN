@@ -54,22 +54,63 @@ interface Publisher {
   productCount: number;
 }
 
+interface SyncLog {
+  id: number;
+  started_at: string;
+  completed_at: string | null;
+  scanned_from_date: string;
+  total_items_found: number;
+  status: string;
+  error_message: string | null;
+  profiles: { name: string } | null;
+}
+
 export default function AdminOverview() {
   const [orders, setOrders] = useState<OrderItem[]>([]);
   const [summary, setSummary] = useState<Summary | null>(null);
   const [publishers, setPublishers] = useState<Publisher[]>([]);
   const [loading, setLoading] = useState(true);
+  const [selectedPublisher, setSelectedPublisher] = useState<string>("");
 
   // Sync states
   const [syncFromDate, setSyncFromDate] = useState("2024-01-01");
   const [isSyncing, setIsSyncing] = useState(false);
   const [syncProgress, setSyncProgress] = useState("");
+  const [syncLogs, setSyncLogs] = useState<SyncLog[]>([]);
+
+  const fetchSyncLogs = async () => {
+    try {
+      const res = await fetch("/api/admin/sync-log");
+      if (res.ok) {
+        const data = await res.json();
+        setSyncLogs(data.logs || []);
+      }
+    } catch (e) { console.error("Failed to fetch sync logs", e); }
+  };
+
+  const saveSyncLog = async (startedAt: string, totalFound: number, status: string, errorMsg?: string) => {
+    try {
+      await fetch("/api/admin/sync-log", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          started_at: startedAt,
+          scanned_from_date: syncFromDate,
+          total_items_found: totalFound,
+          status,
+          error_message: errorMsg || null
+        })
+      });
+      fetchSyncLogs();
+    } catch (e) { console.error("Failed to save sync log", e); }
+  };
 
   const startSync = async () => {
     if (!confirm("Start historical sync? This will run down the Shopify backlog in blocks of 5 pages.")) return;
     setIsSyncing(true);
     setSyncProgress("Starting sync...");
     
+    const startedAt = new Date().toISOString();
     let pageInfo = null;
     let chunks = 0;
     let totalFound = 0;
@@ -91,16 +132,18 @@ export default function AdminOverview() {
         
         if (!data.nextPageInfo) {
           setSyncProgress(`✅ Complete! Found ${totalFound} tracked items across the history.`);
+          await saveSyncLog(startedAt, totalFound, "success");
           break;
         }
         pageInfo = data.nextPageInfo;
       }
     } catch (err) {
-      setSyncProgress(`❌ Error: ${err instanceof Error ? err.message : 'Unknown'}`);
+      const errMsg = err instanceof Error ? err.message : 'Unknown';
+      setSyncProgress(`❌ Error: ${errMsg}`);
+      await saveSyncLog(startedAt, totalFound, "error", errMsg);
     } finally {
       setIsSyncing(false);
-      // Refresh the page data to show the new historical orders!
-      fetchData(fromDate, toDate);
+      fetchData(fromDate, toDate, selectedPublisher);
     }
   };
   // Date range — default last 30 days
@@ -112,11 +155,12 @@ export default function AdminOverview() {
   const [toDate, setToDate] = useState(today.toISOString().split("T")[0]);
   const [activePreset, setActivePreset] = useState<string>("30");
 
-  const fetchData = (from: string, to: string) => {
+  const fetchData = (from: string, to: string, pubId?: string) => {
     setLoading(true);
     const params = new URLSearchParams();
     if (from) params.set("from", from);
     if (to) params.set("to", to);
+    if (pubId) params.set("publisher_id", pubId);
 
     Promise.all([
       fetch(`/api/shopify/orders?${params.toString()}`).then((r) => r.json()),
@@ -133,11 +177,17 @@ export default function AdminOverview() {
 
   useEffect(() => {
     fetchData(fromDate, toDate);
+    fetchSyncLogs();
   }, []);
 
   const handleFilter = () => {
     setActivePreset("custom");
-    fetchData(fromDate, toDate);
+    fetchData(fromDate, toDate, selectedPublisher);
+  };
+
+  const handlePublisherChange = (pubId: string) => {
+    setSelectedPublisher(pubId);
+    fetchData(fromDate, toDate, pubId);
   };
 
   const setPreset = (days: number) => {
@@ -149,7 +199,7 @@ export default function AdminOverview() {
     setFromDate(from);
     setToDate(to);
     setActivePreset(String(days));
-    fetchData(from, to);
+    fetchData(from, to, selectedPublisher);
   };
 
   const setAllTime = () => {
@@ -158,7 +208,7 @@ export default function AdminOverview() {
     setFromDate(from);
     setToDate(to);
     setActivePreset("all");
-    fetchData(from, to);
+    fetchData(from, to, selectedPublisher);
   };
 
   // --- Chart Data Preparation ---
@@ -356,6 +406,20 @@ export default function AdminOverview() {
             <button className={`btn btn-sm ${activePreset === "all" ? "btn-primary" : "btn-secondary"}`} onClick={setAllTime} disabled={loading}
               style={{ fontSize: "0.7rem", padding: "0.3rem 0.6rem" }}>All Time</button>
           </div>
+          <div style={{ borderLeft: "1px solid var(--border-subtle)", height: "24px" }} />
+          <div style={{ display: "flex", alignItems: "center", gap: "0.5rem" }}>
+            <label style={{ fontSize: "0.8rem", color: "var(--text-secondary)", whiteSpace: "nowrap" }}>Collaborator</label>
+            <select
+              value={selectedPublisher}
+              onChange={(e) => handlePublisherChange(e.target.value)}
+              style={{ padding: "0.45rem 0.65rem", background: "var(--bg-input)", border: "1px solid var(--border-subtle)", borderRadius: "var(--radius-sm)", color: "var(--text-primary)", fontSize: "0.85rem", outline: "none", colorScheme: "dark", minWidth: "140px" }}
+            >
+              <option value="">All Collaborators</option>
+              {publishers.map((pub) => (
+                <option key={pub.id} value={pub.id}>{pub.name}</option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
@@ -394,6 +458,55 @@ export default function AdminOverview() {
         {syncProgress && (
           <div style={{ marginTop: "1rem", padding: "0.75rem", background: "rgba(56, 189, 248, 0.1)", borderLeft: "3px solid #38bdf8", borderRadius: "0 4px 4px 0", fontSize: "0.85rem", color: "#e2e8f0" }}>
             {syncProgress}
+          </div>
+        )}
+
+        {/* Sync History Audit Log */}
+        {syncLogs.length > 0 && (
+          <div style={{ marginTop: "1.5rem" }}>
+            <h3 style={{ fontSize: "0.9rem", color: "var(--text-secondary)", marginBottom: "0.75rem" }}>Sync History</h3>
+            <div style={{ overflowX: "auto" }}>
+              <table className="data-table" style={{ width: "100%", fontSize: "0.8rem" }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Date</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Run By</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Scanned From</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Items Found</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Duration</th>
+                    <th style={{ padding: "0.5rem 0.75rem" }}>Status</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {syncLogs.map((log) => {
+                    const started = new Date(log.started_at);
+                    const completed = log.completed_at ? new Date(log.completed_at) : null;
+                    const durationSec = completed ? Math.round((completed.getTime() - started.getTime()) / 1000) : null;
+                    const durationStr = durationSec !== null
+                      ? durationSec >= 60 ? `${Math.floor(durationSec / 60)}m ${durationSec % 60}s` : `${durationSec}s`
+                      : "—";
+                    return (
+                      <tr key={log.id}>
+                        <td style={{ padding: "0.5rem 0.75rem", whiteSpace: "nowrap" }}>
+                          {started.toLocaleDateString("en-MY", { day: "numeric", month: "short", year: "numeric" })}{" "}
+                          <span style={{ color: "var(--text-muted)" }}>{started.toLocaleTimeString("en-MY", { hour: "2-digit", minute: "2-digit" })}</span>
+                        </td>
+                        <td style={{ padding: "0.5rem 0.75rem" }}>{log.profiles?.name || "—"}</td>
+                        <td style={{ padding: "0.5rem 0.75rem" }}>{log.scanned_from_date}</td>
+                        <td style={{ padding: "0.5rem 0.75rem", fontWeight: 600 }}>{log.total_items_found.toLocaleString()}</td>
+                        <td style={{ padding: "0.5rem 0.75rem" }}>{durationStr}</td>
+                        <td style={{ padding: "0.5rem 0.75rem" }}>
+                          <span className={`badge ${log.status === "success" ? "badge-success" : log.status === "error" ? "badge-danger" : "badge-warning"}`}
+                            title={log.error_message || ""}>
+                            {log.status}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
           </div>
         )}
       </div>
