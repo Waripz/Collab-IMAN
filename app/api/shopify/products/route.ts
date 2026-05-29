@@ -20,7 +20,20 @@ export async function GET(request: NextRequest) {
     const ids = request.nextUrl.searchParams.get("ids");
     
     if (!ids) {
-      return NextResponse.json({ products: [] });
+      // Fetch all products for the Permissions page
+      const { fetchAllProducts } = await import("@/lib/shopify");
+      const allProducts = await fetchAllProducts();
+      
+      return NextResponse.json({
+        products: allProducts.map((p: any) => ({
+          id: p.id,
+          title: p.title,
+          vendor: p.vendor,
+          product_type: p.product_type,
+          status: p.status,
+          image: p.image?.src || null,
+        })),
+      });
     }
 
     // Fetch specific products by IDs — single fast call
