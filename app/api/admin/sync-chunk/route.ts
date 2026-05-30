@@ -47,8 +47,8 @@ export async function POST(request: NextRequest) {
     let pagesProcessed = 0;
     const newValidOrders = [];
 
-    // Safety limit of 5 pages per API chunk to strictly stay under the Vercel 10-15s timeout
-    while (hasNext && pagesProcessed < 5) {
+    // Safety limit of 2 pages per API chunk to strictly stay under the Vercel 10s timeout
+    while (hasNext && pagesProcessed < 2) {
       pagesProcessed++;
       let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
       

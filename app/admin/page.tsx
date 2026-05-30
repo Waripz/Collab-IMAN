@@ -119,14 +119,30 @@ export default function AdminOverview() {
     try {
       while (storeIndex !== null) {
         chunks++;
-        setSyncProgress(`Fetching block ${chunks} (up to 1,250 orders, Store ${storeIndex + 1})... Found ${totalFound} tracked items so far.`);
-        const response: Response = await fetch("/api/admin/sync-chunk", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fromDate: syncFromDate, pageInfo, storeIndex })
-        });
+        setSyncProgress(`Fetching block ${chunks} (up to 500 orders, Store ${storeIndex + 1})... Found ${totalFound} tracked items so far.`);
         
-        if (!response.ok) throw new Error("Sync failed. Check console.");
+        let retries = 0;
+        let response: Response | null = null;
+        let success = false;
+        
+        while (retries < 3 && !success) {
+          try {
+            response = await fetch("/api/admin/sync-chunk", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ fromDate: syncFromDate, pageInfo, storeIndex })
+            });
+            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            success = true;
+          } catch (e) {
+            retries++;
+            if (retries >= 3) throw e;
+            setSyncProgress(`Network error on block ${chunks}. Retrying (${retries}/3) in 3s...`);
+            await new Promise(r => setTimeout(r, 3000));
+          }
+        }
+        
+        if (!response || !response.ok) throw new Error("Sync failed. Check console.");
         
         const data = await response.json();
         totalFound += data.itemsFound || 0;
