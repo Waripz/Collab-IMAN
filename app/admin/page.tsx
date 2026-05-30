@@ -144,7 +144,7 @@ export default function AdminOverview() {
         
         if (!response || !response.ok) throw new Error("Sync failed. Check console.");
         
-        const data = await response.json();
+        const data: any = await response.json();
         totalFound += data.itemsFound || 0;
         
         if (data.nextStoreIndex === null && !data.nextPageInfo) {
