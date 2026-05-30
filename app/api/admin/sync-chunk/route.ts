@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { getAuthUser, apiError } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase-server";
-import { getShopifyToken } from "@/lib/shopify";
+import { getShopifyToken, stores } from "@/lib/shopify";
 
-const SHOP = process.env.SHOPIFY_SHOP!;
 const API_VERSION = "2024-01";
 
 /**
@@ -12,6 +11,7 @@ const API_VERSION = "2024-01";
  * 
  * Fetches exactly 5 pages of historical Shopify orders and syncs tracked items into Supabase.
  * Designed to be called recursively by the Admin Web UI to bypass Vercel 10s timeouts.
+ * Supports multiple Shopify stores by passing a storeIndex.
  */
 export async function POST(request: NextRequest) {
   try {
@@ -20,8 +20,14 @@ export async function POST(request: NextRequest) {
     if (user.role !== "admin") return apiError("Forbidden", 403);
 
     const body = await request.json();
-    const { fromDate, pageInfo: clientPageInfo } = body;
+    const { fromDate, pageInfo: clientPageInfo, storeIndex: clientStoreIndex } = body;
+    const storeIndex = clientStoreIndex || 0;
 
+    if (storeIndex >= stores.length) {
+      return NextResponse.json({ success: true, nextPageInfo: null, nextStoreIndex: null, itemsFound: 0, message: "All stores synced" });
+    }
+
+    const store = stores[storeIndex];
     const supabase = createServiceClient();
     
     // 1. Get ALL global tracked products
@@ -32,10 +38,10 @@ export async function POST(request: NextRequest) {
     const allowedSet = new Set(allowedProductIds);
 
     if (allowedProductIds.length === 0) {
-      return NextResponse.json({ success: true, nextPageInfo: null, message: "No tracked products" });
+      return NextResponse.json({ success: true, nextPageInfo: null, nextStoreIndex: null, message: "No tracked products" });
     }
 
-    const token = await getShopifyToken();
+    const token = await getShopifyToken(storeIndex);
     let currentPageInfo = clientPageInfo || null;
     let hasNext = true;
     let pagesProcessed = 0;
@@ -44,7 +50,7 @@ export async function POST(request: NextRequest) {
     // Safety limit of 5 pages per API chunk to strictly stay under the Vercel 10-15s timeout
     while (hasNext && pagesProcessed < 5) {
       pagesProcessed++;
-      let url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
+      let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
       
       if (currentPageInfo) {
         url += `limit=250&page_info=${currentPageInfo}`;
@@ -60,7 +66,7 @@ export async function POST(request: NextRequest) {
           await new Promise(r => setTimeout(r, 2000));
           continue;
         }
-        throw new Error(`Shopify API error: ${response.status}`);
+        throw new Error(`Shopify API error for ${store.shop}: ${response.status}`);
       }
 
       const data = await response.json();
@@ -122,10 +128,26 @@ export async function POST(request: NextRequest) {
       }
     }
 
+    let nextStoreIndex = storeIndex;
+    let nextPageInfo = currentPageInfo;
+
+    // If we finished this store, move to the next store for the next API call
+    if (!currentPageInfo) {
+      if (storeIndex + 1 < stores.length) {
+        nextStoreIndex = storeIndex + 1;
+        nextPageInfo = null;
+      } else {
+        nextStoreIndex = null;
+        nextPageInfo = null;
+      }
+    }
+
     return NextResponse.json({
       success: true,
-      nextPageInfo: currentPageInfo,
-      itemsFound: newValidOrders.length
+      nextPageInfo,
+      nextStoreIndex,
+      itemsFound: newValidOrders.length,
+      storeName: store.shop
     });
   } catch (err) {
     console.error("Chunk sync error:", err);

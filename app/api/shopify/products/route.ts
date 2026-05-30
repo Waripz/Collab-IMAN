@@ -1,8 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, apiError } from "@/lib/auth";
-import { getShopifyToken } from "@/lib/shopify";
+import { getShopifyToken, stores } from "@/lib/shopify";
 
-const SHOP = process.env.SHOPIFY_SHOP!;
 const API_VERSION = "2024-01";
 
 /**
@@ -36,22 +35,30 @@ export async function GET(request: NextRequest) {
       });
     }
 
-    // Fetch specific products by IDs — single fast call
-    const token = await getShopifyToken();
-    const url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${ids}&fields=id,title,vendor,product_type,status,image`;
+    // Fetch specific products by IDs — across all configured stores
+    const products: any[] = [];
     
-    const response = await fetch(url, {
-      headers: { "X-Shopify-Access-Token": token },
-    });
+    for (let i = 0; i < stores.length; i++) {
+      const store = stores[i];
+      const token = await getShopifyToken(i);
+      const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${ids}&fields=id,title,vendor,product_type,status,image`;
+      
+      const response = await fetch(url, {
+        headers: { "X-Shopify-Access-Token": token },
+      });
 
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.products) {
+          products.push(...data.products);
+        }
+      } else {
+        console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
+      }
     }
 
-    const data = await response.json();
-
     return NextResponse.json({
-      products: (data.products || []).map((p: { id: number; title: string; vendor: string; product_type: string; status: string; image?: { src: string } | null }) => ({
+      products: products.map((p: { id: number; title: string; vendor: string; product_type: string; status: string; image?: { src: string } | null }) => ({
         id: p.id,
         title: p.title,
         vendor: p.vendor,

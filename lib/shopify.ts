@@ -3,47 +3,79 @@
  * Ported from main.py — handles token management and data fetching.
  */
 
-const SHOP = process.env.SHOPIFY_SHOP!;
-const CLIENT_ID = process.env.SHOPIFY_CLIENT_ID!;
-const CLIENT_SECRET = process.env.SHOPIFY_CLIENT_SECRET!;
+export interface StoreConfig {
+  shop: string;
+  clientId: string;
+  clientSecret: string;
+}
+
+export const stores: StoreConfig[] = [];
+if (process.env.SHOPIFY_SHOP) {
+  stores.push({
+    shop: process.env.SHOPIFY_SHOP,
+    clientId: process.env.SHOPIFY_CLIENT_ID!,
+    clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,
+  });
+}
+if (process.env.SHOPIFY_SHOP_2) {
+  stores.push({
+    shop: process.env.SHOPIFY_SHOP_2,
+    clientId: process.env.SHOPIFY_CLIENT_ID_2!,
+    clientSecret: process.env.SHOPIFY_CLIENT_SECRET_2!,
+  });
+}
+if (process.env.SHOPIFY_SHOP_3) {
+  stores.push({
+    shop: process.env.SHOPIFY_SHOP_3,
+    clientId: process.env.SHOPIFY_CLIENT_ID_3!,
+    clientSecret: process.env.SHOPIFY_CLIENT_SECRET_3!,
+  });
+}
+
 const API_VERSION = "2024-01";
 
-// --- Token Manager (same logic as Python get_token()) ---
-let cachedToken: string | null = null;
-let tokenExpiresAt = 0;
+// --- Token Manager ---
+const tokenCache: Record<number, { token: string; expiresAt: number }> = {};
 
-export async function getShopifyToken(): Promise<string> {
-  if (cachedToken && Date.now() / 1000 < tokenExpiresAt - 60) {
-    return cachedToken;
+export async function getShopifyToken(storeIndex = 0): Promise<string> {
+  const store = stores[storeIndex];
+  if (!store) throw new Error(`Store index ${storeIndex} not configured`);
+
+  const cached = tokenCache[storeIndex];
+  if (cached && Date.now() / 1000 < cached.expiresAt - 60) {
+    return cached.token;
   }
 
   const response = await fetch(
-    `https://${SHOP}.myshopify.com/admin/oauth/access_token`,
+    `https://${store.shop}.myshopify.com/admin/oauth/access_token`,
     {
       method: "POST",
       headers: { "Content-Type": "application/x-www-form-urlencoded" },
       body: new URLSearchParams({
         grant_type: "client_credentials",
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
+        client_id: store.clientId,
+        client_secret: store.clientSecret,
       }),
     }
   );
 
   if (!response.ok) {
-    throw new Error(`Shopify auth failed: ${response.statusText}`);
+    throw new Error(`Shopify auth failed for ${store.shop}: ${response.statusText}`);
   }
 
   const data = await response.json();
-  cachedToken = data.access_token;
-  tokenExpiresAt = Date.now() / 1000 + (data.expires_in || 86400);
-  return cachedToken!;
+  tokenCache[storeIndex] = {
+    token: data.access_token,
+    expiresAt: Date.now() / 1000 + (data.expires_in || 86400)
+  };
+  return data.access_token;
 }
 
 // --- Helper: authenticated fetch ---
-async function shopifyFetch(endpoint: string) {
-  const token = await getShopifyToken();
-  const url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/${endpoint}`;
+async function shopifyFetch(endpoint: string, storeIndex = 0) {
+  const token = await getShopifyToken(storeIndex);
+  const store = stores[storeIndex];
+  const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/${endpoint}`;
   const response = await fetch(url, {
     headers: { "X-Shopify-Access-Token": token },
   });
@@ -78,42 +110,52 @@ export async function fetchAllOrders(
   untilDate?: string
 ): Promise<ShopifyOrder[]> {
   const allOrders: ShopifyOrder[] = [];
-  let pageInfo: string | null = null;
-  let hasNextPage = true;
 
-  while (hasNextPage) {
-    let endpoint: string;
-    
-    if (pageInfo) {
-      endpoint = `orders.json?limit=250&page_info=${pageInfo}`;
-    } else {
-      let params = "status=any&limit=250";
-      if (sinceDate) params += `&created_at_min=${sinceDate}`;
-      if (untilDate) params += `&created_at_max=${untilDate}`;
-      endpoint = `orders.json?${params}`;
-    }
+  for (let i = 0; i < stores.length; i++) {
+    const store = stores[i];
+    let pageInfo: string | null = null;
+    let hasNextPage = true;
 
-    const token = await getShopifyToken();
-    const url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/${endpoint}`;
-    const response = await fetch(url, {
-      headers: { "X-Shopify-Access-Token": token },
-    });
+    while (hasNextPage) {
+      let endpoint: string;
+      
+      if (pageInfo) {
+        endpoint = `orders.json?limit=250&page_info=${pageInfo}`;
+      } else {
+        let params = "status=any&limit=250";
+        if (sinceDate) params += `&created_at_min=${sinceDate}`;
+        if (untilDate) params += `&created_at_max=${untilDate}`;
+        endpoint = `orders.json?${params}`;
+      }
 
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
-    }
+      const token = await getShopifyToken(i);
+      const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/${endpoint}`;
+      const response = await fetch(url, {
+        headers: { "X-Shopify-Access-Token": token },
+      });
 
-    const data = await response.json();
-    allOrders.push(...(data.orders || []));
+      if (!response.ok) {
+        throw new Error(`Shopify API error for store ${store.shop}: ${response.status}`);
+      }
 
-    // Handle pagination via Link header
-    const linkHeader = response.headers.get("Link");
-    if (linkHeader && linkHeader.includes('rel="next"')) {
-      const match = linkHeader.match(/page_info=([^>&]*)/);
-      pageInfo = match ? match[1] : null;
-      hasNextPage = !!pageInfo;
-    } else {
-      hasNextPage = false;
+      const data = await response.json();
+      allOrders.push(...(data.orders || []));
+
+      // Handle pagination via Link header
+      const linkHeader = response.headers.get("Link");
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const links = linkHeader.split(",");
+        const nextLink = links.find((l) => l.includes('rel="next"'));
+        if (nextLink) {
+          const match = nextLink.match(/page_info=([^>&]*)/);
+          pageInfo = match ? match[1] : null;
+          hasNextPage = !!pageInfo;
+        } else {
+          hasNextPage = false;
+        }
+      } else {
+        hasNextPage = false;
+      }
     }
   }
 
@@ -170,38 +212,48 @@ export interface ShopifyProduct {
 
 export async function fetchAllProducts(): Promise<ShopifyProduct[]> {
   const allProducts: ShopifyProduct[] = [];
-  let pageInfo: string | null = null;
-  let hasNextPage = true;
 
-  while (hasNextPage) {
-    let endpoint: string;
+  for (let i = 0; i < stores.length; i++) {
+    const store = stores[i];
+    let pageInfo: string | null = null;
+    let hasNextPage = true;
 
-    if (pageInfo) {
-      endpoint = `products.json?limit=250&page_info=${pageInfo}`;
-    } else {
-      endpoint = `products.json?limit=250`;
-    }
+    while (hasNextPage) {
+      let endpoint: string;
 
-    const token = await getShopifyToken();
-    const url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/${endpoint}`;
-    const response = await fetch(url, {
-      headers: { "X-Shopify-Access-Token": token },
-    });
+      if (pageInfo) {
+        endpoint = `products.json?limit=250&page_info=${pageInfo}`;
+      } else {
+        endpoint = `products.json?limit=250`;
+      }
 
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
-    }
+      const token = await getShopifyToken(i);
+      const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/${endpoint}`;
+      const response = await fetch(url, {
+        headers: { "X-Shopify-Access-Token": token },
+      });
 
-    const data = await response.json();
-    allProducts.push(...(data.products || []));
+      if (!response.ok) {
+        throw new Error(`Shopify API error for store ${store.shop}: ${response.status}`);
+      }
 
-    const linkHeader = response.headers.get("Link");
-    if (linkHeader && linkHeader.includes('rel="next"')) {
-      const match = linkHeader.match(/page_info=([^>&]*)/);
-      pageInfo = match ? match[1] : null;
-      hasNextPage = !!pageInfo;
-    } else {
-      hasNextPage = false;
+      const data = await response.json();
+      allProducts.push(...(data.products || []));
+
+      const linkHeader = response.headers.get("Link");
+      if (linkHeader && linkHeader.includes('rel="next"')) {
+        const links = linkHeader.split(",");
+        const nextLink = links.find((l) => l.includes('rel="next"'));
+        if (nextLink) {
+          const match = nextLink.match(/page_info=([^>&]*)/);
+          pageInfo = match ? match[1] : null;
+          hasNextPage = !!pageInfo;
+        } else {
+          hasNextPage = false;
+        }
+      } else {
+        hasNextPage = false;
+      }
     }
   }
 
@@ -210,7 +262,8 @@ export async function fetchAllProducts(): Promise<ShopifyProduct[]> {
 
 // --- Fetch inventory levels ---
 export async function fetchInventoryLevels(
-  inventoryItemIds: number[]
+  inventoryItemIds: number[],
+  storeIndex = 0
 ): Promise<Record<number, number>> {
   const levels: Record<number, number> = {};
   
@@ -223,7 +276,8 @@ export async function fetchInventoryLevels(
   for (const chunk of chunks) {
     const ids = chunk.join(",");
     const data = await shopifyFetch(
-      `inventory_levels.json?inventory_item_ids=${ids}`
+      `inventory_levels.json?inventory_item_ids=${ids}`,
+      storeIndex
     );
     for (const level of data.inventory_levels || []) {
       const existing = levels[level.inventory_item_id] || 0;

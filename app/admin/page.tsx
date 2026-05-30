@@ -106,23 +106,24 @@ export default function AdminOverview() {
   };
 
   const startSync = async () => {
-    if (!confirm("Start historical sync? This will run down the Shopify backlog in blocks of 5 pages.")) return;
+    if (!confirm("Start historical sync? This will run down the Shopify backlog in blocks of 5 pages across all stores.")) return;
     setIsSyncing(true);
     setSyncProgress("Starting sync...");
     
     const startedAt = new Date().toISOString();
     let pageInfo = null;
+    let storeIndex: number | null = 0;
     let chunks = 0;
     let totalFound = 0;
     
     try {
-      while (true) {
+      while (storeIndex !== null) {
         chunks++;
-        setSyncProgress(`Fetching block ${chunks} (up to 1,250 orders)... Found ${totalFound} tracked items so far.`);
+        setSyncProgress(`Fetching block ${chunks} (up to 1,250 orders, Store ${storeIndex + 1})... Found ${totalFound} tracked items so far.`);
         const response: Response = await fetch("/api/admin/sync-chunk", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fromDate: syncFromDate, pageInfo })
+          body: JSON.stringify({ fromDate: syncFromDate, pageInfo, storeIndex })
         });
         
         if (!response.ok) throw new Error("Sync failed. Check console.");
@@ -130,12 +131,13 @@ export default function AdminOverview() {
         const data = await response.json();
         totalFound += data.itemsFound || 0;
         
-        if (!data.nextPageInfo) {
+        if (data.nextStoreIndex === null && !data.nextPageInfo) {
           setSyncProgress(`✅ Complete! Found ${totalFound} tracked items across the history.`);
           await saveSyncLog(startedAt, totalFound, "success");
           break;
         }
         pageInfo = data.nextPageInfo;
+        storeIndex = data.nextStoreIndex;
       }
     } catch (err) {
       const errMsg = err instanceof Error ? err.message : 'Unknown';
