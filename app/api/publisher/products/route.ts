@@ -31,6 +31,8 @@ export async function GET(request: NextRequest) {
     const products: any[] = [];
     const chunkSize = 50;
     
+    const fetchPromises = [];
+    
     for (let i = 0; i < stores.length; i++) {
       const store = stores[i];
       const token = await getShopifyToken(i);
@@ -39,18 +41,21 @@ export async function GET(request: NextRequest) {
         const idChunk = productIds.slice(j, j + chunkSize);
         const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${idChunk.join(",")}&fields=id,title,vendor,product_type,status,image,variants,created_at,updated_at`;
 
-        const response = await fetch(url, {
-          headers: { "X-Shopify-Access-Token": token },
-        });
+        fetchPromises.push(
+          fetch(url, { headers: { "X-Shopify-Access-Token": token } })
+            .then(res => res.ok ? res.json() : null)
+            .catch(err => {
+              console.warn(`Shopify API error for store ${store.shop}:`, err);
+              return null;
+            })
+        );
+      }
+    }
 
-        if (response.ok) {
-          const data = await response.json();
-          if (data.products) {
-            products.push(...data.products);
-          }
-        } else {
-          console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
-        }
+    const results = await Promise.all(fetchPromises);
+    for (const data of results) {
+      if (data && data.products) {
+        products.push(...data.products);
       }
     }
 
