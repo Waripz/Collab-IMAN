@@ -12,23 +12,23 @@ export interface StoreConfig {
 export const stores: StoreConfig[] = [];
 if (process.env.SHOPIFY_SHOP) {
   stores.push({
-    shop: process.env.SHOPIFY_SHOP,
-    clientId: process.env.SHOPIFY_CLIENT_ID!,
-    clientSecret: process.env.SHOPIFY_CLIENT_SECRET!,
+    shop: process.env.SHOPIFY_SHOP.replace('.myshopify.com', '').trim(),
+    clientId: process.env.SHOPIFY_CLIENT_ID!.trim(),
+    clientSecret: process.env.SHOPIFY_CLIENT_SECRET!.trim(),
   });
 }
 if (process.env.SHOPIFY_SHOP_2) {
   stores.push({
-    shop: process.env.SHOPIFY_SHOP_2,
-    clientId: process.env.SHOPIFY_CLIENT_ID_2!,
-    clientSecret: process.env.SHOPIFY_CLIENT_SECRET_2!,
+    shop: process.env.SHOPIFY_SHOP_2.replace('.myshopify.com', '').trim(),
+    clientId: process.env.SHOPIFY_CLIENT_ID_2!.trim(),
+    clientSecret: process.env.SHOPIFY_CLIENT_SECRET_2!.trim(),
   });
 }
 if (process.env.SHOPIFY_SHOP_3) {
   stores.push({
-    shop: process.env.SHOPIFY_SHOP_3,
-    clientId: process.env.SHOPIFY_CLIENT_ID_3!,
-    clientSecret: process.env.SHOPIFY_CLIENT_SECRET_3!,
+    shop: process.env.SHOPIFY_SHOP_3.replace('.myshopify.com', '').trim(),
+    clientId: process.env.SHOPIFY_CLIENT_ID_3!.trim(),
+    clientSecret: process.env.SHOPIFY_CLIENT_SECRET_3!.trim(),
   });
 }
 

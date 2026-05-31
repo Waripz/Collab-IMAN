@@ -132,7 +132,12 @@ export default function AdminOverview() {
               headers: { "Content-Type": "application/json" },
               body: JSON.stringify({ fromDate: syncFromDate, pageInfo, storeIndex })
             });
-            if (!response.ok) throw new Error(`HTTP ${response.status}`);
+            if (!response.ok) {
+              const errText = await response.text();
+              let parsedErr = errText;
+              try { parsedErr = JSON.parse(errText).error || errText; } catch(e){}
+              throw new Error(`HTTP ${response.status}: ${parsedErr}`);
+            }
             success = true;
           } catch (e) {
             retries++;
