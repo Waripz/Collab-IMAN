@@ -1,9 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, apiError } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase-server";
-import { getShopifyToken } from "@/lib/shopify";
-
-const SHOP = process.env.SHOPIFY_SHOP!;
+import { getShopifyToken, stores } from "@/lib/shopify";
 const API_VERSION = "2024-01";
 
 /**
@@ -29,31 +27,29 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ products: [] });
     }
 
-    // Fetch product details from Shopify by IDs (single fast call)
-    const token = await getShopifyToken();
-    const url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${productIds.join(",")}&fields=id,title,vendor,product_type,status,image,variants,created_at,updated_at`;
+    // Fetch product details from Shopify by IDs across ALL stores
+    const products: any[] = [];
+    
+    for (let i = 0; i < stores.length; i++) {
+      const store = stores[i];
+      const token = await getShopifyToken(i);
+      const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${productIds.join(",")}&fields=id,title,vendor,product_type,status,image,variants,created_at,updated_at`;
 
-    const response = await fetch(url, {
-      headers: { "X-Shopify-Access-Token": token },
-    });
+      const response = await fetch(url, {
+        headers: { "X-Shopify-Access-Token": token },
+      });
 
-    if (!response.ok) {
-      throw new Error(`Shopify API error: ${response.status}`);
+      if (response.ok) {
+        const data = await response.json();
+        if (data.products) {
+          products.push(...data.products);
+        }
+      } else {
+        console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
+      }
     }
 
-    const data = await response.json();
-
-    const products = (data.products || []).map((p: {
-      id: number;
-      title: string;
-      vendor: string;
-      product_type: string;
-      status: string;
-      image?: { src: string } | null;
-      variants?: { price: string; inventory_quantity: number }[];
-      created_at: string;
-      updated_at: string;
-    }) => ({
+    const formattedProducts = products.map((p: any) => ({
       id: p.id,
       title: p.title,
       vendor: p.vendor,
@@ -66,7 +62,7 @@ export async function GET(request: NextRequest) {
       updated_at: p.updated_at,
     }));
 
-    return NextResponse.json({ products });
+    return NextResponse.json({ products: formattedProducts });
   } catch (err) {
     console.error("Publisher products error:", err);
     return apiError("Failed to fetch products", 500);
