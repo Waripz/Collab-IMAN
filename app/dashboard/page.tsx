@@ -57,6 +57,7 @@ export default function PublisherDashboard() {
   const [loading, setLoading] = useState(true);
   const [currentPage, setCurrentPage] = useState(1);
   const [searchQuery, setSearchQuery] = useState("");
+  const [productSearchQuery, setProductSearchQuery] = useState("");
   const itemsPerPage = 25;
 
   // Date range — default last 30 days
@@ -269,9 +270,20 @@ export default function PublisherDashboard() {
   const avgOrderValue = summary && summary.totalOrders > 0
     ? (summary.totalRevenue / summary.totalOrders).toFixed(2) : "0.00";
 
+  const filteredProducts = productSearchQuery.trim()
+    ? products.filter(p => p.name.toLowerCase().includes(productSearchQuery.toLowerCase()))
+    : products;
+
+  const filteredSummary = {
+    units: filteredProducts.reduce((sum, p) => sum + p.units, 0),
+    gross: filteredProducts.reduce((sum, p) => sum + p.gross, 0),
+    discount: filteredProducts.reduce((sum, p) => sum + p.discount, 0),
+    net: filteredProducts.reduce((sum, p) => sum + (p.gross - p.discount), 0),
+  };
+
   const downloadCSV = () => {
     const headers = ["Product Title", "Items Sold", "Gross Sales (RM)", "Discounts (RM)", "Net Sales (RM)", "Total Sales (RM)"];
-    const rows = products.map((p) => {
+    const rows = filteredProducts.map((p) => {
       const net = p.gross - p.discount;
       return [
         `"${p.name.replace(/"/g, '""')}"`,
@@ -285,11 +297,11 @@ export default function PublisherDashboard() {
     // Add summary row
     const summaryRow = [
       "Summary",
-      summary?.totalUnits || 0,
-      (summary?.grossSales || 0).toFixed(2),
-      `-${(summary?.totalDiscounts || 0).toFixed(2)}`,
-      (summary?.netSales || 0).toFixed(2),
-      (summary?.totalRevenue || 0).toFixed(2),
+      filteredSummary.units,
+      filteredSummary.gross.toFixed(2),
+      `-${filteredSummary.discount.toFixed(2)}`,
+      filteredSummary.net.toFixed(2),
+      filteredSummary.net.toFixed(2),
     ].join(",");
 
     const csv = [headers.join(","), summaryRow, ...rows].join("\n");
@@ -468,14 +480,28 @@ export default function PublisherDashboard() {
 
       {/* Total Sales Breakdown — Shopify Report Style */}
       <div className="card">
-        <div className="card-header">
+        <div className="card-header" style={{ flexWrap: "wrap", gap: "1rem" }}>
           <h2>Total sales breakdown</h2>
-          <button className="btn btn-secondary btn-sm" onClick={downloadCSV} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
-            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-              <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
-            </svg>
-            Download CSV
-          </button>
+          <div style={{ display: "flex", gap: "0.5rem", alignItems: "center" }}>
+            <div style={{ position: "relative" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#9ca3af" strokeWidth="2" style={{ position: "absolute", left: 8, top: "50%", transform: "translateY(-50%)" }}>
+                <circle cx="11" cy="11" r="8" /><line x1="21" y1="21" x2="16.65" y2="16.65" />
+              </svg>
+              <input
+                type="text"
+                placeholder="Search products..."
+                value={productSearchQuery}
+                onChange={(e) => setProductSearchQuery(e.target.value)}
+                style={{ padding: "0.4rem 0.6rem 0.4rem 1.8rem", border: "1px solid #e3e3e3", borderRadius: "6px", fontSize: "0.82rem", outline: "none", width: "200px", color: "#1a1c1e", background: "white" }}
+              />
+            </div>
+            <button className="btn btn-secondary btn-sm" onClick={downloadCSV} style={{ display: "flex", alignItems: "center", gap: "0.35rem" }}>
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" /><polyline points="7 10 12 15 17 10" /><line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+              Download CSV
+            </button>
+          </div>
         </div>
         <div className="table-wrapper">
           <table className="data-table">
@@ -491,16 +517,18 @@ export default function PublisherDashboard() {
             </thead>
             <tbody>
               {/* Summary Row */}
-              <tr style={{ fontWeight: 600, background: "#f9fafb" }}>
-                <td style={{ fontWeight: 700, color: "#1a1c1e" }}>Summary</td>
-                <td style={{ textAlign: "right", color: "#1a1c1e" }}>{summary?.totalUnits || 0}</td>
-                <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {(summary?.grossSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={{ textAlign: "right", color: "#dc2626" }}>-RM {(summary?.totalDiscounts || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {(summary?.netSales || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                <td style={{ textAlign: "right", color: "#1a1c1e", fontWeight: 700 }}>RM {(summary?.totalRevenue || 0).toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-              </tr>
+              {filteredProducts.length > 0 && (
+                <tr style={{ fontWeight: 600, background: "#f9fafb" }}>
+                  <td style={{ fontWeight: 700, color: "#1a1c1e" }}>Summary</td>
+                  <td style={{ textAlign: "right", color: "#1a1c1e" }}>{filteredSummary.units}</td>
+                  <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {filteredSummary.gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td style={{ textAlign: "right", color: "#dc2626" }}>-RM {filteredSummary.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {filteredSummary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                  <td style={{ textAlign: "right", color: "#1a1c1e", fontWeight: 700 }}>RM {filteredSummary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
+                </tr>
+              )}
               {/* Product Rows */}
-              {products.map((p) => {
+              {filteredProducts.length > 0 ? filteredProducts.map((p) => {
                 const net = p.gross - p.discount;
                 return (
                   <tr key={p.name}>
@@ -514,7 +542,13 @@ export default function PublisherDashboard() {
                     <td style={{ textAlign: "right", fontWeight: 600 }}>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   </tr>
                 );
-              })}
+              }) : (
+                <tr>
+                  <td colSpan={6} style={{ textAlign: "center", padding: "2rem", color: "#616161" }}>
+                    No products found matching "{productSearchQuery}"
+                  </td>
+                </tr>
+              )}
             </tbody>
           </table>
         </div>
