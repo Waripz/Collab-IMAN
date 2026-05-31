@@ -88,7 +88,7 @@ export async function GET(request: NextRequest) {
         let pages = 0;
         const storeOrders = [];
 
-        while (hasNext && pages < 10) { // Safety cap of 10 pages for real-time delta per store
+        while (hasNext && pages < 50) { // Safety cap of 50 pages for real-time delta per store
           pages++;
           let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
           if (pageInfo) {
