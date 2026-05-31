@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from "next/server";
 import { getAuthUser, apiError } from "@/lib/auth";
 import { getShopifyToken, stores } from "@/lib/shopify";
-
 const API_VERSION = "2024-01";
+export const maxDuration = 60;
 
 /**
  * GET /api/shopify/products
@@ -38,22 +38,28 @@ export async function GET(request: NextRequest) {
     // Fetch specific products by IDs — across all configured stores
     const products: any[] = [];
     
-    for (let i = 0; i < stores.length; i++) {
-      const store = stores[i];
-      const token = await getShopifyToken(i);
-      const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${ids}&fields=id,title,vendor,product_type,status,image`;
-      
-      const response = await fetch(url, {
-        headers: { "X-Shopify-Access-Token": token },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        if (data.products) {
-          products.push(...data.products);
+    const fetchPromises = stores.map(async (store, i) => {
+      try {
+        const token = await getShopifyToken(i);
+        const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${ids}&fields=id,title,vendor,product_type,status,image`;
+        
+        const response = await fetch(url, { headers: { "X-Shopify-Access-Token": token } });
+        if (response.ok) {
+          return await response.json();
+        } else {
+          console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
+          return null;
         }
-      } else {
-        console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
+      } catch (e) {
+        console.warn(`Failed to fetch for store ${store.shop}`, e);
+        return null;
+      }
+    });
+
+    const results = await Promise.all(fetchPromises);
+    for (const data of results) {
+      if (data && data.products) {
+        products.push(...data.products);
       }
     }
 
