@@ -2,9 +2,8 @@ import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
 import { getAuthUser, apiError } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase-server";
-import { getShopifyToken } from "@/lib/shopify";
-
-const SHOP = process.env.SHOPIFY_SHOP!;
+import { getShopifyToken, stores } from "@/lib/shopify";
+export const maxDuration = 60;
 const API_VERSION = "2024-01";
 
 /**
@@ -77,61 +76,76 @@ export async function GET(request: NextRequest) {
       latestSyncDate.setMinutes(latestSyncDate.getMinutes() - 5); 
     }
 
-    // 2. Fetch RECENT orders from Shopify (Real-time delta sync)
-    const token = await getShopifyToken();
+    // 2. Fetch RECENT orders from Shopify (Real-time delta sync across ALL stores concurrently)
     const allowedSet = new Set(allowedProductIds);
-    let pageInfo: string | null = null;
-    let hasNext = true;
-    let pages = 0;
-    const newValidOrders = [];
+    const newValidOrders: any[] = [];
 
-    while (hasNext && pages < 10) { // Safety cap of 10 pages for real-time delta
-      pages++;
-      let url = `https://${SHOP}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
-      if (pageInfo) {
-        url += `limit=250&page_info=${pageInfo}`;
-      } else {
-        url += `status=any&limit=250&updated_at_min=${latestSyncDate.toISOString()}`;
-      }
+    const fetchPromises = stores.map(async (store, i) => {
+      try {
+        const token = await getShopifyToken(i);
+        let pageInfo: string | null = null;
+        let hasNext = true;
+        let pages = 0;
+        const storeOrders = [];
 
-      const response = await fetch(url, { headers: { "X-Shopify-Access-Token": token }, cache: "no-store" });
-      if (!response.ok) break;
+        while (hasNext && pages < 10) { // Safety cap of 10 pages for real-time delta per store
+          pages++;
+          let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
+          if (pageInfo) {
+            url += `limit=250&page_info=${pageInfo}`;
+          } else {
+            url += `status=any&limit=250&updated_at_min=${latestSyncDate.toISOString()}`;
+          }
 
-      const data = await response.json();
-      const shopifyOrders = data.orders || [];
+          const response = await fetch(url, { headers: { "X-Shopify-Access-Token": token }, cache: "no-store" });
+          if (!response.ok) break;
 
-      if (shopifyOrders.length === 0) break;
+          const data = await response.json();
+          const shopifyOrders = data.orders || [];
 
-      for (const order of shopifyOrders) {
-        if (order.cancelled_at || order.financial_status === "refunded") continue;
+          if (shopifyOrders.length === 0) break;
 
-        const matchingItems = (order.line_items || []).filter((li: { product_id: number }) => allowedSet.has(li.product_id));
-        if (matchingItems.length === 0) continue;
+          for (const order of shopifyOrders) {
+            if (order.cancelled_at || order.financial_status === "refunded") continue;
 
-        for (const item of matchingItems) {
-          const allocatedDiscount = (item.discount_allocations || []).reduce((sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0);
+            const matchingItems = (order.line_items || []).filter((li: { product_id: number }) => allowedSet.has(li.product_id));
+            if (matchingItems.length === 0) continue;
 
-          newValidOrders.push({
-            order_date: order.created_at,
-            order_number: order.name,
-            product_name: item.title,
-            product_id: item.product_id,
-            quantity: item.quantity,
-            price: parseFloat(item.price),
-            discount: allocatedDiscount,
-            channel: order.source_name === "pos" ? "POS" : "Online",
-            synced_at: new Date().toISOString()
-          });
+            for (const item of matchingItems) {
+              const allocatedDiscount = (item.discount_allocations || []).reduce((sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0);
+
+              storeOrders.push({
+                order_date: order.created_at,
+                order_number: order.name,
+                product_name: item.title,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                price: parseFloat(item.price),
+                discount: allocatedDiscount,
+                channel: order.source_name === "pos" ? "POS" : "Online",
+                synced_at: new Date().toISOString()
+              });
+            }
+          }
+
+          const linkHeader = response.headers.get("Link");
+          if (linkHeader && linkHeader.includes('rel="next"')) {
+            const match = linkHeader.match(/page_info=([^>&]*)/);
+            pageInfo = match ? match[1] : null;
+          } else {
+            hasNext = false;
+          }
         }
+        return storeOrders;
+      } catch (err) {
+        console.warn(`Delta sync error for store ${store.shop}:`, err);
+        return [];
       }
+    });
 
-      const linkHeader = response.headers.get("Link");
-      if (linkHeader && linkHeader.includes('rel="next"')) {
-        const match = linkHeader.match(/page_info=([^>&]*)/);
-        pageInfo = match ? match[1] : null;
-      } else {
-        hasNext = false;
-      }
+    const storeResults = await Promise.all(fetchPromises);
+    for (const orders of storeResults) {
+      newValidOrders.push(...orders);
     }
 
     // 3. Upsert the real-time orders into Supabase synchronously
