@@ -27,25 +27,30 @@ export async function GET(request: NextRequest) {
       return NextResponse.json({ products: [] });
     }
 
-    // Fetch product details from Shopify by IDs across ALL stores
+    // Shopify API limits ?ids=... to 50 IDs per request. We must chunk them.
     const products: any[] = [];
+    const chunkSize = 50;
     
     for (let i = 0; i < stores.length; i++) {
       const store = stores[i];
       const token = await getShopifyToken(i);
-      const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${productIds.join(",")}&fields=id,title,vendor,product_type,status,image,variants,created_at,updated_at`;
+      
+      for (let j = 0; j < productIds.length; j += chunkSize) {
+        const idChunk = productIds.slice(j, j + chunkSize);
+        const url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/products.json?ids=${idChunk.join(",")}&fields=id,title,vendor,product_type,status,image,variants,created_at,updated_at`;
 
-      const response = await fetch(url, {
-        headers: { "X-Shopify-Access-Token": token },
-      });
+        const response = await fetch(url, {
+          headers: { "X-Shopify-Access-Token": token },
+        });
 
-      if (response.ok) {
-        const data = await response.json();
-        if (data.products) {
-          products.push(...data.products);
+        if (response.ok) {
+          const data = await response.json();
+          if (data.products) {
+            products.push(...data.products);
+          }
+        } else {
+          console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
         }
-      } else {
-        console.warn(`Shopify API error for store ${store.shop}: ${response.status}`);
       }
     }
 
