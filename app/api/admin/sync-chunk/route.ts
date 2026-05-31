@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
 export const dynamic = "force-dynamic";
+export const maxDuration = 10;
 import { getAuthUser, apiError } from "@/lib/auth";
 import { createServiceClient } from "@/lib/supabase-server";
 import { getShopifyToken, stores } from "@/lib/shopify";
@@ -47,16 +48,16 @@ export async function POST(request: NextRequest) {
     let pagesProcessed = 0;
     const newValidOrders = [];
 
-    // Safety limit of 2 pages per API chunk to strictly stay under the Vercel 10s timeout
-    while (hasNext && pagesProcessed < 2) {
+    // Safety limit: 1 page per chunk to strictly stay under Vercel 10s timeout
+    while (hasNext && pagesProcessed < 1) {
       pagesProcessed++;
       let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
       
       if (currentPageInfo) {
-        url += `limit=250&page_info=${currentPageInfo}`;
+        url += `limit=100&page_info=${currentPageInfo}`;
       } else {
         const fromIso = fromDate ? `${fromDate}T00:00:00+08:00` : "2024-01-01T00:00:00+08:00";
-        url += `status=any&limit=250&created_at_min=${fromIso}`;
+        url += `status=any&limit=100&created_at_min=${fromIso}`;
       }
 
       const response = await fetch(url, { headers: { "X-Shopify-Access-Token": token }, cache: "no-store" });

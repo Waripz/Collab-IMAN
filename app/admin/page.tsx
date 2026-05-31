@@ -119,7 +119,7 @@ export default function AdminOverview() {
     try {
       while (storeIndex !== null) {
         chunks++;
-        setSyncProgress(`Fetching block ${chunks} (up to 500 orders, Store ${storeIndex + 1})... Found ${totalFound} tracked items so far.`);
+        setSyncProgress(`Fetching block ${chunks} (Store ${storeIndex + 1} of 3)... Found ${totalFound} tracked items so far.`);
         
         let retries = 0;
         let response: Response | null = null;
