@@ -282,7 +282,7 @@ export default function PublisherDashboard() {
   };
 
   const downloadCSV = () => {
-    const headers = ["Product Title", "Items Sold", "Gross Sales (RM)", "Discounts (RM)", "Net Sales (RM)", "Total Sales (RM)"];
+    const headers = ["Product Title", "Items Sold", "Gross Sales (RM)", "Discounts (RM)", "Net Sales (RM)"];
     const rows = filteredProducts.map((p) => {
       const net = p.gross - p.discount;
       return [
@@ -290,7 +290,6 @@ export default function PublisherDashboard() {
         p.units,
         p.gross.toFixed(2),
         p.discount > 0 ? `-${p.discount.toFixed(2)}` : "0.00",
-        net.toFixed(2),
         net.toFixed(2),
       ].join(",");
     });
@@ -300,7 +299,6 @@ export default function PublisherDashboard() {
       filteredSummary.units,
       filteredSummary.gross.toFixed(2),
       `-${filteredSummary.discount.toFixed(2)}`,
-      filteredSummary.net.toFixed(2),
       filteredSummary.net.toFixed(2),
     ].join(",");
 
@@ -512,7 +510,6 @@ export default function PublisherDashboard() {
                 <th style={{ textAlign: "right" }}>Gross sales</th>
                 <th style={{ textAlign: "right" }}>Discounts</th>
                 <th style={{ textAlign: "right" }}>Net sales</th>
-                <th style={{ textAlign: "right" }}>Total sales</th>
               </tr>
             </thead>
             <tbody>
@@ -523,7 +520,6 @@ export default function PublisherDashboard() {
                   <td style={{ textAlign: "right", color: "#1a1c1e" }}>{filteredSummary.units}</td>
                   <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {filteredSummary.gross.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   <td style={{ textAlign: "right", color: "#dc2626" }}>-RM {filteredSummary.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
-                  <td style={{ textAlign: "right", color: "#1a1c1e" }}>RM {filteredSummary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   <td style={{ textAlign: "right", color: "#1a1c1e", fontWeight: 700 }}>RM {filteredSummary.net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                 </tr>
               )}
@@ -538,7 +534,6 @@ export default function PublisherDashboard() {
                     <td style={{ textAlign: "right", color: p.discount > 0 ? "#dc2626" : undefined }}>
                       {p.discount > 0 ? "-" : ""}RM {p.discount.toLocaleString(undefined, { minimumFractionDigits: 2 })}
                     </td>
-                    <td style={{ textAlign: "right" }}>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                     <td style={{ textAlign: "right", fontWeight: 600 }}>RM {net.toLocaleString(undefined, { minimumFractionDigits: 2 })}</td>
                   </tr>
                 );
