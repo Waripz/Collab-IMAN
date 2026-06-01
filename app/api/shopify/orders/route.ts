@@ -115,7 +115,7 @@ export async function GET(request: NextRequest) {
               const allocatedDiscount = (item.discount_allocations || []).reduce((sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0);
 
               storeOrders.push({
-                order_date: order.created_at,
+                order_date: order.processed_at || order.created_at,
                 order_number: order.name,
                 product_name: item.title,
                 product_id: item.product_id,
