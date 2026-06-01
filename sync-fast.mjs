@@ -35,13 +35,22 @@ async function getToken(store) {
 async function run() {
   console.log('=== FAST SYNC (RECENT ONLY) ===\n');
 
-  // 1. Get all tracked product IDs
-  const { data: allPerms } = await supabase.from('publisher_products').select('shopify_product_id');
-  const allowedIds = [...new Set((allPerms || []).map(d => d.shopify_product_id))];
-  const allowedSet = new Set(allowedIds);
-  console.log(`Tracking ${allowedIds.length} product IDs across all publishers.\n`);
+  const PAGE_SIZE = 1000;
+  let allPerms = [];
+  let start = 0;
+  let more = true;
+  while (more) {
+    const { data } = await supabase.from('publisher_products').select('shopify_product_id').range(start, start + PAGE_SIZE - 1);
+    if (!data || data.length === 0) more = false;
+    else {
+      allPerms = allPerms.concat(data);
+      start += PAGE_SIZE;
+    }
+  }
+  const allowedSet = new Set(allPerms.map(p => p.shopify_product_id));
+  console.log(`Tracking ${allowedSet.size} product IDs across all publishers.`);
 
-  if (allowedIds.length === 0) { console.log('No tracked products!'); return; }
+  if (allowedSet.size === 0) { console.log('No tracked products!'); return; }
 
   const allMatchedOrders = [];
 
@@ -113,10 +122,13 @@ async function run() {
         // Parse next page
         const linkHeader = response.headers.get('Link');
         if (linkHeader && linkHeader.includes('rel="next"')) {
-          const nl = linkHeader.split(',').find(l => l.includes('rel="next"'));
-          const m = nl?.match(/page_info=([^>&]*)/);
-          pageInfo = m ? m[1] : null; hasNext = !!pageInfo;
-        } else hasNext = false;
+          const nextLink = linkHeader.split(',').find(l => l.includes('rel="next"'));
+          const match = nextLink ? nextLink.match(/page_info=([^>&]*)/) : null;
+          pageInfo = match ? match[1] : null;
+          if (!pageInfo) hasNext = false;
+        } else {
+          hasNext = false;
+        }
       }
 
       console.log(`  Done! ${pageCount} pages, ${storeOrders} matched items.\n`);
