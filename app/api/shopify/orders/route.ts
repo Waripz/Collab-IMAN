@@ -114,13 +114,20 @@ export async function GET(request: NextRequest) {
             for (const item of matchingItems) {
               const allocatedDiscount = (item.discount_allocations || []).reduce((sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0);
 
+              let finalPrice = parseFloat(item.price);
+              if (order.taxes_included) {
+                const totalTax = (item.tax_lines || []).reduce((sum: number, t: { price: string }) => sum + parseFloat(t.price || "0"), 0);
+                const unitTax = item.quantity > 0 ? (totalTax / item.quantity) : 0;
+                finalPrice = finalPrice - unitTax;
+              }
+
               storeOrders.push({
                 order_date: order.processed_at || order.created_at,
                 order_number: order.name,
                 product_name: item.title,
                 product_id: item.product_id,
                 quantity: item.quantity,
-                price: parseFloat(item.price),
+                price: finalPrice,
                 discount: allocatedDiscount,
                 channel: order.source_name === "pos" ? "POS" : "Online",
                 synced_at: new Date().toISOString()
