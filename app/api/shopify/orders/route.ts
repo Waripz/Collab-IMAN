@@ -26,23 +26,38 @@ export async function GET(request: NextRequest) {
     if (user.role === "admin") {
       const publisherId = request.nextUrl.searchParams.get("publisher_id");
       if (publisherId) {
-        const { data } = await supabase
-          .from("publisher_products")
-          .select("shopify_product_id")
-          .eq("user_id", publisherId);
-        allowedProductIds = (data || []).map((d) => d.shopify_product_id);
+        // Fetch specific publisher's products (usually < 1000)
+        let allIds = [];
+        let start = 0;
+        let more = true;
+        while (more) {
+          const { data } = await supabase.from("publisher_products").select("shopify_product_id").eq("user_id", publisherId).range(start, start + 999);
+          if (!data || data.length === 0) more = false;
+          else { allIds.push(...data); start += 1000; }
+        }
+        allowedProductIds = allIds.map((d) => d.shopify_product_id);
       } else {
-        const { data } = await supabase
-          .from("publisher_products")
-          .select("shopify_product_id");
-        allowedProductIds = [...new Set((data || []).map((d) => d.shopify_product_id))];
+        // Fetch ALL products (definitely > 1000)
+        let allIds = [];
+        let start = 0;
+        let more = true;
+        while (more) {
+          const { data } = await supabase.from("publisher_products").select("shopify_product_id").range(start, start + 999);
+          if (!data || data.length === 0) more = false;
+          else { allIds.push(...data); start += 1000; }
+        }
+        allowedProductIds = [...new Set(allIds.map((d) => d.shopify_product_id))];
       }
     } else {
-      const { data } = await supabase
-        .from("publisher_products")
-        .select("shopify_product_id")
-        .eq("user_id", user.id);
-      allowedProductIds = (data || []).map((d) => d.shopify_product_id);
+      let allIds = [];
+      let start = 0;
+      let more = true;
+      while (more) {
+        const { data } = await supabase.from("publisher_products").select("shopify_product_id").eq("user_id", user.id).range(start, start + 999);
+        if (!data || data.length === 0) more = false;
+        else { allIds.push(...data); start += 1000; }
+      }
+      allowedProductIds = allIds.map((d) => d.shopify_product_id);
     }
 
     if (allowedProductIds.length === 0) {
@@ -137,8 +152,10 @@ export async function GET(request: NextRequest) {
 
           const linkHeader = response.headers.get("Link");
           if (linkHeader && linkHeader.includes('rel="next"')) {
-            const match = linkHeader.match(/page_info=([^>&]*)/);
+            const nextLink = linkHeader.split(',').find((l: string) => l.includes('rel="next"'));
+            const match = nextLink ? nextLink.match(/page_info=([^>&]*)/) : null;
             pageInfo = match ? match[1] : null;
+            if (!pageInfo) hasNext = false;
           } else {
             hasNext = false;
           }
