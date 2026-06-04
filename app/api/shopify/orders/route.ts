@@ -102,8 +102,8 @@ export async function GET(request: NextRequest) {
         let pages = 0;
         const newOrders: any[] = [];
 
-        // Cap at 3 pages (750 orders max) — DTR3 is small, this finishes in ~3-5 seconds
-        while (hasNext && pages < 3) {
+        // Cap at 15 pages — DTR3 is a small store, this ensures ALL recent orders are fetched
+        while (hasNext && pages < 15) {
           pages++;
           let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
           if (pageInfo) {
