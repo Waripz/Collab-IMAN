@@ -75,8 +75,11 @@ export default function PublisherDashboard() {
     if (from) params.set("from", from);
     if (to) params.set("to", to);
 
-    fetch(`/api/shopify/orders?${params.toString()}`)
-      .then((r) => r.json())
+    fetch(`/api/shopify/orders?${params.toString()}`, { cache: "no-store" })
+      .then((r) => {
+        if (!r.ok) throw new Error("Failed to fetch");
+        return r.json();
+      })
       .then((data) => {
         setOrders(data.orders || []);
         setSummary(data.summary);
