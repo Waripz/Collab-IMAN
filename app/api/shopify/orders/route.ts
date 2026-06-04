@@ -73,8 +73,114 @@ export async function GET(request: NextRequest) {
     const fromDateIso = fromDate ? `${fromDate}T00:00:00+08:00` : "2020-01-01T00:00:00+08:00";
     const toDateIso = toDate ? `${toDate}T23:59:59+08:00` : new Date().toISOString();
 
-    // The Real-Time Delta Fetching logic has been moved to the background cron job (/api/cron/sync)
-    // to prevent the dashboard from timing out on Vercel and improve load times.
+    // --- LIGHTWEIGHT REAL-TIME DELTA SYNC (DTR3 only) ---
+    // Only checks DTR3 (store index 1) with a tight page cap so it finishes in seconds.
+    // The daily cron job at /api/cron/sync handles the heavier full-store sync.
+    const DTR3_INDEX = 1; // pbakl-2026-dtr3
+    if (stores[DTR3_INDEX]) {
+      try {
+        const allowedSet = new Set(allowedProductIds);
+
+        // Find latest sync timestamp
+        const { data: latestCache } = await supabase
+          .from("orders_cache")
+          .select("synced_at")
+          .order("synced_at", { ascending: false })
+          .limit(1);
+
+        let latestSyncDate = new Date();
+        latestSyncDate.setDate(latestSyncDate.getDate() - 7);
+        if (latestCache && latestCache.length > 0 && latestCache[0].synced_at) {
+          latestSyncDate = new Date(latestCache[0].synced_at as string);
+          latestSyncDate.setMinutes(latestSyncDate.getMinutes() - 10);
+        }
+
+        const token = await getShopifyToken(DTR3_INDEX);
+        const store = stores[DTR3_INDEX];
+        let pageInfo: string | null = null;
+        let hasNext = true;
+        let pages = 0;
+        const newOrders: any[] = [];
+
+        // Cap at 3 pages (750 orders max) — DTR3 is small, this finishes in ~3-5 seconds
+        while (hasNext && pages < 3) {
+          pages++;
+          let url = `https://${store.shop}.myshopify.com/admin/api/${API_VERSION}/orders.json?`;
+          if (pageInfo) {
+            url += `limit=250&page_info=${pageInfo}`;
+          } else {
+            url += `status=any&limit=250&updated_at_min=${latestSyncDate.toISOString()}`;
+          }
+
+          const response = await fetch(url, {
+            headers: { "X-Shopify-Access-Token": token },
+            cache: "no-store",
+          });
+          if (!response.ok) break;
+
+          const data = await response.json();
+          const shopifyOrders = data.orders || [];
+          if (shopifyOrders.length === 0) break;
+
+          for (const order of shopifyOrders) {
+            if (order.cancelled_at || order.financial_status === "refunded") continue;
+
+            const matchingItems = (order.line_items || []).filter(
+              (li: { product_id: number }) => allowedSet.has(li.product_id)
+            );
+            if (matchingItems.length === 0) continue;
+
+            for (const item of matchingItems) {
+              const allocatedDiscount = (item.discount_allocations || []).reduce(
+                (sum: number, da: { amount: string }) => sum + parseFloat(da.amount || "0"), 0
+              );
+              let finalPrice = parseFloat(item.price);
+              if (order.taxes_included) {
+                const totalTax = (item.tax_lines || []).reduce(
+                  (sum: number, t: { price: string }) => sum + parseFloat(t.price || "0"), 0
+                );
+                const unitTax = item.quantity > 0 ? totalTax / item.quantity : 0;
+                finalPrice = finalPrice - unitTax;
+              }
+              newOrders.push({
+                order_date: order.processed_at || order.created_at,
+                order_number: order.name,
+                product_name: item.title,
+                product_id: item.product_id,
+                quantity: item.quantity,
+                price: finalPrice,
+                discount: allocatedDiscount,
+                channel: order.source_name === "pos" ? "POS" : "Online",
+                synced_at: new Date().toISOString(),
+              });
+            }
+          }
+
+          const linkHeader = response.headers.get("Link");
+          if (linkHeader && linkHeader.includes('rel="next"')) {
+            const nextLink = linkHeader.split(",").find((l: string) => l.includes('rel="next"'));
+            const match = nextLink ? nextLink.match(/page_info=([^>&]*)/) : null;
+            pageInfo = match ? match[1] : null;
+            if (!pageInfo) hasNext = false;
+          } else {
+            hasNext = false;
+          }
+        }
+
+        // Upsert any new orders found
+        if (newOrders.length > 0) {
+          for (let i = 0; i < newOrders.length; i += 200) {
+            await supabase.from("orders_cache").upsert(
+              newOrders.slice(i, i + 200),
+              { onConflict: "order_number,product_id" }
+            );
+          }
+        }
+      } catch (err) {
+        console.warn("Real-time DTR3 delta sync error (non-fatal):", err);
+        // Non-fatal — we still return cached data below
+      }
+    }
 
     // 4. Finally, pull everything requested directly from Supabase! ⚡
     // Supabase has a default 1000-row limit, so we paginate to get ALL rows
