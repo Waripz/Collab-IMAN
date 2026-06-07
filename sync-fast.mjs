@@ -11,9 +11,7 @@ const API_VERSION = '2024-01';
 const supabase = createClient(env['NEXT_PUBLIC_SUPABASE_URL'], env['SUPABASE_SERVICE_ROLE_KEY']);
 
 const stores = [
-  { shop: env['SHOPIFY_SHOP'], clientId: env['SHOPIFY_CLIENT_ID'], clientSecret: env['SHOPIFY_CLIENT_SECRET'] },
   { shop: env['SHOPIFY_SHOP_2'], clientId: env['SHOPIFY_CLIENT_ID_2'], clientSecret: env['SHOPIFY_CLIENT_SECRET_2'] },
-  { shop: env['SHOPIFY_SHOP_3'], clientId: env['SHOPIFY_CLIENT_ID_3'], clientSecret: env['SHOPIFY_CLIENT_SECRET_3'] },
 ].filter(s => s.shop).map(s => ({
   ...s,
   shop: s.shop.replace('.myshopify.com', '').trim(),

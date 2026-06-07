@@ -76,7 +76,7 @@ export async function GET(request: NextRequest) {
     // --- LIGHTWEIGHT REAL-TIME DELTA SYNC (DTR3 only) ---
     // Only checks DTR3 (store index 1) with a tight page cap so it finishes in seconds.
     // The daily cron job at /api/cron/sync handles the heavier full-store sync.
-    const DTR3_INDEX = 1; // pbakl-2026-dtr3
+    const DTR3_INDEX = 0; // pbakl-2026-dtr3 is now the ONLY store in the array
     if (stores[DTR3_INDEX]) {
       try {
         const allowedSet = new Set(allowedProductIds);
